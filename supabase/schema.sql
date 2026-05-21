@@ -12,11 +12,23 @@ create table if not exists public.users (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.clothes (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  category text not null check (
+    category in ('上衣', '裤子', '裙子', '外套', '鞋子', '帽子', '包包', '首饰')
+  ),
+  brand text,
+  image_url text not null,
+  created_at timestamptz not null default now()
+);
+
 alter table public.users
 add column if not exists front_photo_url text,
 add column if not exists side_photo_url text;
 
 alter table public.users enable row level security;
+alter table public.clothes enable row level security;
 
 insert into storage.buckets (id, name, public)
 values ('avatars', 'avatars', true)
@@ -26,13 +38,23 @@ insert into storage.buckets (id, name, public)
 values ('body-photos', 'body-photos', true)
 on conflict (id) do update set public = excluded.public;
 
+insert into storage.buckets (id, name, public)
+values ('clothes', 'clothes', true)
+on conflict (id) do update set public = excluded.public;
+
 drop policy if exists "Allow anonymous profile inserts" on public.users;
 drop policy if exists "Allow anonymous profile reads" on public.users;
 drop policy if exists "Allow anonymous profile photo updates" on public.users;
+drop policy if exists "Allow anonymous clothes inserts" on public.clothes;
+drop policy if exists "Allow anonymous clothes reads" on public.clothes;
+drop policy if exists "Allow anonymous clothes deletes" on public.clothes;
 drop policy if exists "Allow anonymous avatar uploads" on storage.objects;
 drop policy if exists "Allow anonymous body photo uploads" on storage.objects;
+drop policy if exists "Allow anonymous clothes uploads" on storage.objects;
+drop policy if exists "Allow anonymous clothes deletes" on storage.objects;
 drop policy if exists "Allow public avatar reads" on storage.objects;
 drop policy if exists "Allow public body photo reads" on storage.objects;
+drop policy if exists "Allow public clothes reads" on storage.objects;
 
 create policy "Allow anonymous profile inserts"
 on public.users
@@ -53,6 +75,24 @@ to anon
 using (true)
 with check (true);
 
+create policy "Allow anonymous clothes inserts"
+on public.clothes
+for insert
+to anon
+with check (true);
+
+create policy "Allow anonymous clothes reads"
+on public.clothes
+for select
+to anon
+using (true);
+
+create policy "Allow anonymous clothes deletes"
+on public.clothes
+for delete
+to anon
+using (true);
+
 create policy "Allow anonymous avatar uploads"
 on storage.objects
 for insert
@@ -65,6 +105,18 @@ for insert
 to anon
 with check (bucket_id = 'body-photos');
 
+create policy "Allow anonymous clothes uploads"
+on storage.objects
+for insert
+to anon
+with check (bucket_id = 'clothes');
+
+create policy "Allow anonymous clothes deletes"
+on storage.objects
+for delete
+to anon
+using (bucket_id = 'clothes');
+
 create policy "Allow public avatar reads"
 on storage.objects
 for select
@@ -76,3 +128,9 @@ on storage.objects
 for select
 to anon, authenticated
 using (bucket_id = 'body-photos');
+
+create policy "Allow public clothes reads"
+on storage.objects
+for select
+to anon, authenticated
+using (bucket_id = 'clothes');

@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 
@@ -147,6 +148,15 @@ export default function BodyPhotosForm() {
       >
         {isSaving ? "上传中..." : "保存照片"}
       </button>
+
+      {savedPhotos.frontPhotoUrl ? (
+        <Link
+          href="/clothes"
+          className="flex h-14 w-full items-center justify-center rounded-full border border-neutral-200 text-base font-semibold text-neutral-950 transition active:scale-[0.98]"
+        >
+          继续上传服装
+        </Link>
+      ) : null}
     </form>
   );
 }

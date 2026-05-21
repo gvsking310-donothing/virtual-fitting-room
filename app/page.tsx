@@ -33,7 +33,9 @@ export default function Home() {
         <div className="grid grid-cols-3 gap-3 text-center text-xs text-neutral-600">
           <div className="rounded-2xl bg-neutral-100 px-2 py-3">身形资料</div>
           <div className="rounded-2xl bg-neutral-100 px-2 py-3">头像上传</div>
-          <div className="rounded-2xl bg-neutral-100 px-2 py-3">智能推荐</div>
+          <Link href="/clothes" className="rounded-2xl bg-neutral-100 px-2 py-3">
+            上传服装
+          </Link>
         </div>
       </section>
     </main>
