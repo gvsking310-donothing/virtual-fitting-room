@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 
 type Gender = "" | "female" | "male" | "other";
@@ -22,6 +23,7 @@ const initialState: FormState = {
 };
 
 export default function ProfileForm() {
+  const router = useRouter();
   const [form, setForm] = useState<FormState>(initialState);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -79,20 +81,26 @@ export default function ProfileForm() {
         avatarUrl = data.publicUrl;
       }
 
-      const { error } = await supabase.from("users").insert({
-        height_cm: Number(form.height),
-        weight_kg: Number(form.weight),
-        gender: form.gender,
-        age: form.age ? Number(form.age) : null,
-        avatar_url: avatarUrl || null,
-      });
+      const { data, error } = await supabase
+        .from("users")
+        .insert({
+          height_cm: Number(form.height),
+          weight_kg: Number(form.weight),
+          gender: form.gender,
+          age: form.age ? Number(form.age) : null,
+          avatar_url: avatarUrl || null,
+        })
+        .select("id")
+        .single();
 
       if (error) {
         throw error;
       }
 
-      setMessage("资料已保存，下一步即将开放。");
+      localStorage.setItem("virtual-fitting-user-id", data.id);
+      setMessage("资料已保存，正在进入下一步。");
       setForm(initialState);
+      router.push("/body-photos");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存失败，请稍后重试。");
     } finally {
