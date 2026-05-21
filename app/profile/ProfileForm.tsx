@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 
 type Gender = "" | "female" | "male" | "other";
 
@@ -74,6 +75,7 @@ export default function ProfileForm() {
           });
 
         if (uploadError) {
+          console.error("Supabase error:", uploadError);
           throw uploadError;
         }
 
@@ -94,7 +96,14 @@ export default function ProfileForm() {
         .single();
 
       if (error) {
+        console.error("Supabase error:", error);
         throw error;
+      }
+
+      if (!data?.id) {
+        const missingIdError = new Error("Supabase insert did not return users.id.");
+        console.error("Supabase error:", missingIdError);
+        throw missingIdError;
       }
 
       localStorage.setItem("virtual-fitting-user-id", data.id);
@@ -102,7 +111,8 @@ export default function ProfileForm() {
       setForm(initialState);
       router.push("/body-photos");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "保存失败，请稍后重试。");
+      console.error("Supabase error:", error);
+      setMessage(getSupabaseErrorMessage(error));
     } finally {
       setIsSaving(false);
     }

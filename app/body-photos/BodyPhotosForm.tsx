@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 
 type PhotoField = "frontPhoto" | "sidePhoto";
 
@@ -34,6 +35,7 @@ async function uploadPhoto(file: File, folder: string) {
     });
 
   if (error) {
+    console.error("Supabase error:", error);
     throw error;
   }
 
@@ -101,13 +103,15 @@ export default function BodyPhotosForm() {
         .eq("id", userId);
 
       if (error) {
+        console.error("Supabase error:", error);
         throw error;
       }
 
       setSavedPhotos({ frontPhotoUrl, sidePhotoUrl });
       setMessage("照片上传成功。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "上传失败，请稍后重试。");
+      console.error("Supabase error:", error);
+      setMessage(getSupabaseErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
