@@ -12,7 +12,7 @@ async function generateTryOn(userPhoto: string, clothingPhoto: string) {
   void clothingPhoto;
 
   return {
-    result_image_url: "https://placehold.co/600x900",
+    result_image_url: "https://placehold.co/600x900?text=AI+Try+On+Result",
   };
 }
 
