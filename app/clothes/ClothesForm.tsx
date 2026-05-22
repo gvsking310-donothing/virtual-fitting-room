@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
@@ -271,43 +272,52 @@ export default function ClothesForm() {
       </form>
 
       {items.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3">
-          {items.map((item) => (
-            <article
-              key={item.id}
-              className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70"
-            >
-              <div className="relative aspect-[3/4] bg-neutral-100">
-                <img
-                  src={item.image_url}
-                  alt={item.name}
-                  className="h-full w-full object-cover"
-                />
-                <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-neutral-950">
-                  {item.category}
-                </span>
-              </div>
-              <div className="space-y-3 p-3">
-                <div>
-                  <h2 className="truncate text-sm font-semibold text-neutral-950">
-                    {item.name}
-                  </h2>
-                  {item.brand ? (
-                    <p className="mt-1 truncate text-xs text-neutral-500">
-                      {item.brand}
-                    </p>
-                  ) : null}
+        <div className="space-y-5">
+          <Link
+            href="/try-on"
+            className="flex h-14 w-full items-center justify-center rounded-full border border-neutral-200 text-base font-semibold text-neutral-950 transition active:scale-[0.98]"
+          >
+            去AI试穿
+          </Link>
+
+          <div className="grid grid-cols-2 gap-3">
+            {items.map((item) => (
+              <article
+                key={item.id}
+                className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70"
+              >
+                <div className="relative aspect-[3/4] bg-neutral-100">
+                  <img
+                    src={item.image_url}
+                    alt={item.name}
+                    className="h-full w-full object-cover"
+                  />
+                  <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-neutral-950">
+                    {item.category}
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(item)}
-                  className="h-10 w-full rounded-full border border-neutral-200 text-sm font-medium text-neutral-700 transition active:scale-[0.98]"
-                >
-                  删除
-                </button>
-              </div>
-            </article>
-          ))}
+                <div className="space-y-3 p-3">
+                  <div>
+                    <h2 className="truncate text-sm font-semibold text-neutral-950">
+                      {item.name}
+                    </h2>
+                    {item.brand ? (
+                      <p className="mt-1 truncate text-xs text-neutral-500">
+                        {item.brand}
+                      </p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(item)}
+                    className="h-10 w-full rounded-full border border-neutral-200 text-sm font-medium text-neutral-700 transition active:scale-[0.98]"
+                  >
+                    删除
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>

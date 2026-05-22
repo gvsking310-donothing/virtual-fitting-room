@@ -2,7 +2,7 @@
 
 AI 虚拟试衣间，基于 Next.js App Router、TypeScript、Tailwind CSS 和 Supabase。
 
-流程包含用户资料录入、全身照片上传和服装衣橱上传，照片会保存到 Supabase Storage。
+流程包含用户资料录入、全身照片上传、服装衣橱上传和 AI 试穿准备页，照片会保存到 Supabase Storage。
 
 ## 本地开发
 
