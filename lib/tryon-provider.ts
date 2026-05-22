@@ -32,34 +32,36 @@ export async function generateMockTryOn(): Promise<TryOnResult> {
 export async function generateReplicateTryOn(
   userPhoto: string,
   clothingPhoto: string,
+  garmentDescription: string,
+  category: string,
 ): Promise<TryOnResult> {
   const token = process.env.REPLICATE_API_TOKEN;
-  const version = process.env.REPLICATE_MODEL_VERSION;
 
   if (!token) {
     throw new Error("REPLICATE_API_TOKEN is not configured.");
   }
 
-  if (!version) {
-    throw new Error("REPLICATE_MODEL_VERSION is not configured.");
-  }
-
-  const response = await fetch("https://api.replicate.com/v1/predictions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Prefer: "wait",
-    },
-    body: JSON.stringify({
-      version,
-      input: {
-        human_img: userPhoto,
-        garm_img: clothingPhoto,
-        crop: true,
+  const response = await fetch(
+    "https://api.replicate.com/v1/models/cuuupid/idm-vton/predictions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Prefer: "wait",
       },
-    }),
-  });
+      body: JSON.stringify({
+        input: {
+          human_img: userPhoto,
+          garm_img: clothingPhoto,
+          garment_des: garmentDescription,
+          category: getReplicateCategory(category),
+          crop: true,
+          steps: 30,
+        },
+      }),
+    },
+  );
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -84,11 +86,18 @@ export async function generateReplicateTryOn(
 export async function generateTryOn(
   userPhoto: string,
   clothingPhoto: string,
+  garmentDescription = "a clothing item",
+  category = "上衣",
 ): Promise<TryOnResult> {
   const provider = process.env.TRYON_PROVIDER ?? "mock";
 
   if (provider === "replicate") {
-    return generateReplicateTryOn(userPhoto, clothingPhoto);
+    return generateReplicateTryOn(
+      userPhoto,
+      clothingPhoto,
+      garmentDescription,
+      category,
+    );
   }
 
   return generateMockTryOn();
@@ -161,4 +170,41 @@ function getReplicateOutputUrl(output: ReplicateOutput | undefined) {
   }
 
   return output.url ?? "";
+}
+
+export function createGarmentDescription(name: string, category: string) {
+  const categoryName = getEnglishCategoryName(category);
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    return `a ${categoryName}`;
+  }
+
+  return `a ${trimmedName} ${categoryName}`;
+}
+
+function getEnglishCategoryName(category: string) {
+  const categoryNames: Record<string, string> = {
+    上衣: "shirt",
+    裤子: "pants",
+    裙子: "skirt",
+    外套: "jacket",
+    鞋子: "shoes",
+    帽子: "hat",
+    包包: "bag",
+    首饰: "accessory",
+  };
+
+  return categoryNames[category] ?? "clothing item";
+}
+
+function getReplicateCategory(category: string) {
+  const categoryMap: Record<string, "upper_body" | "lower_body" | "dresses"> = {
+    上衣: "upper_body",
+    外套: "upper_body",
+    裤子: "lower_body",
+    裙子: "dresses",
+  };
+
+  return categoryMap[category] ?? "upper_body";
 }

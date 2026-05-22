@@ -1,10 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { generateTryOn } from "@/lib/tryon-provider";
+import { createGarmentDescription, generateTryOn } from "@/lib/tryon-provider";
 
 type TryOnRequest = {
   user_photo_url?: string;
   clothing_image_url?: string;
+  clothing_name?: string;
+  clothing_category?: string;
   job_id?: string;
 };
 
@@ -21,7 +23,13 @@ function getSupabaseServerClient() {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as TryOnRequest;
-  const { clothing_image_url: clothingImageUrl, job_id: jobId, user_photo_url: userPhotoUrl } = body;
+  const {
+    clothing_category: clothingCategory,
+    clothing_image_url: clothingImageUrl,
+    clothing_name: clothingName,
+    job_id: jobId,
+    user_photo_url: userPhotoUrl,
+  } = body;
 
   if (!jobId || !userPhotoUrl || !clothingImageUrl) {
     return NextResponse.json(
@@ -46,7 +54,16 @@ export async function POST(request: Request) {
       throw processingError;
     }
 
-    const result = await generateTryOn(userPhotoUrl, clothingImageUrl);
+    const garmentDescription = createGarmentDescription(
+      clothingName ?? "",
+      clothingCategory ?? "上衣",
+    );
+    const result = await generateTryOn(
+      userPhotoUrl,
+      clothingImageUrl,
+      garmentDescription,
+      clothingCategory,
+    );
 
     const { error } = await supabase
       .from("try_on_jobs")
