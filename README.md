@@ -24,6 +24,11 @@ npm run dev
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+TRYON_PROVIDER=mock
+REPLICATE_API_TOKEN=
+REPLICATE_MODEL_VERSION=
 ```
+
+`TRYON_PROVIDER=mock` 是默认模式。切换到 `replicate` 前，需要配置 `REPLICATE_API_TOKEN` 和可用的 `REPLICATE_MODEL_VERSION`。
 
 推送到 GitHub `main` 分支后，Vercel 连接该仓库即可自动部署。

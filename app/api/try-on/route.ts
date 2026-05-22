@@ -1,20 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { generateTryOn } from "@/lib/tryon-provider";
 
 type TryOnRequest = {
   user_photo_url?: string;
   clothing_image_url?: string;
   job_id?: string;
 };
-
-async function generateTryOn(userPhoto: string, clothingPhoto: string) {
-  void userPhoto;
-  void clothingPhoto;
-
-  return {
-    result_image_url: "https://placehold.co/600x900?text=AI+Try+On+Result",
-  };
-}
 
 function getSupabaseServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
