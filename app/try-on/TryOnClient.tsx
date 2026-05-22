@@ -122,6 +122,23 @@ export default function TryOnClient() {
         throw error;
       }
 
+      const response = await fetch("/api/try-on", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          job_id: data.id,
+          user_photo_url: profile.front_photo_url,
+          clothing_image_url: selectedClothing.image_url,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        throw new Error(result.error || "AI试穿任务生成失败。");
+      }
+
       router.push(`/try-on/result?id=${data.id}`);
     } catch (error) {
       console.error("Supabase error:", error);

@@ -21,23 +21,25 @@ export default function TryOnResultClient() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    const jobId = searchParams.get("id");
+
+    if (!jobId) {
+      setMessage("缺少试穿任务 ID。");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      setMessage("请先在 Vercel 配置 Supabase 环境变量。");
+      setIsLoading(false);
+      return;
+    }
+
+    const supabaseClient = supabase;
+
     async function loadJob() {
-      const jobId = searchParams.get("id");
-
-      if (!jobId) {
-        setMessage("缺少试穿任务 ID。");
-        setIsLoading(false);
-        return;
-      }
-
-      if (!isSupabaseConfigured || !supabase) {
-        setMessage("请先在 Vercel 配置 Supabase 环境变量。");
-        setIsLoading(false);
-        return;
-      }
-
       try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
           .from("try_on_jobs")
           .select(
             "id, user_photo_url, clothing_image_url, status, result_image_url, created_at",
@@ -60,6 +62,9 @@ export default function TryOnResultClient() {
     }
 
     loadJob();
+    const intervalId = window.setInterval(loadJob, 2000);
+
+    return () => window.clearInterval(intervalId);
   }, [searchParams]);
 
   if (isLoading) {
@@ -106,14 +111,30 @@ export default function TryOnResultClient() {
         </div>
       </article>
 
-      <article className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 px-5 py-8 text-center">
-        <p className="text-sm font-semibold text-neutral-950">
-          {job.status === "processing" ? "AI试穿处理中..." : job.status}
-        </p>
-        <p className="mt-2 text-xs leading-5 text-neutral-500">
-          暂时显示占位结果，真实 AI 试穿结果稍后接入。
-        </p>
-      </article>
+      {job.status === "done" && job.result_image_url ? (
+        <article className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
+          <div className="relative aspect-[2/3] bg-neutral-100">
+            <img
+              src={job.result_image_url}
+              alt="AI试穿结果"
+              className="h-full w-full object-cover"
+            />
+          </div>
+          <div className="p-4">
+            <h2 className="text-sm font-semibold text-neutral-950">试穿结果</h2>
+          </div>
+        </article>
+      ) : (
+        <article className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 px-5 py-8 text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-950" />
+          <p className="mt-4 text-sm font-semibold text-neutral-950">
+            {job.status === "failed" ? "AI试穿生成失败" : "AI试穿处理中..."}
+          </p>
+          <p className="mt-2 text-xs leading-5 text-neutral-500">
+            暂时显示占位结果，真实 AI 试穿结果稍后接入。
+          </p>
+        </article>
+      )}
     </div>
   );
 }

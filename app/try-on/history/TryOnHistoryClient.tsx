@@ -10,6 +10,7 @@ type TryOnJob = {
   user_photo_url: string;
   clothing_image_url: string;
   status: "pending" | "processing" | "done" | "failed";
+  result_image_url: string | null;
   created_at: string;
 };
 
@@ -36,7 +37,9 @@ export default function TryOnHistoryClient() {
       try {
         const { data, error } = await supabase
           .from("try_on_jobs")
-          .select("id, user_photo_url, clothing_image_url, status, created_at")
+          .select(
+            "id, user_photo_url, clothing_image_url, status, result_image_url, created_at",
+          )
           .order("created_at", { ascending: false });
 
         if (error) {
@@ -88,7 +91,7 @@ export default function TryOnHistoryClient() {
           href={`/try-on/result?id=${job.id}`}
           className="block overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70 transition active:scale-[0.99]"
         >
-          <div className="grid grid-cols-2 gap-px bg-neutral-200">
+          <div className="grid grid-cols-3 gap-px bg-neutral-200">
             <div className="aspect-[3/4] bg-neutral-100">
               <img
                 src={job.user_photo_url}
@@ -102,6 +105,19 @@ export default function TryOnHistoryClient() {
                 alt="衣服图片"
                 className="h-full w-full object-cover"
               />
+            </div>
+            <div className="aspect-[3/4] bg-neutral-100">
+              {job.result_image_url ? (
+                <img
+                  src={job.result_image_url}
+                  alt="试穿结果"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center px-2 text-center text-xs leading-5 text-neutral-500">
+                  结果生成中
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center justify-between p-4">
