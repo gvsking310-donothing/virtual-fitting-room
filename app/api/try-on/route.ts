@@ -5,7 +5,6 @@ import { createGarmentDescription, generateTryOn } from "@/lib/tryon-provider";
 type TryOnRequest = {
   user_photo_url?: string;
   clothing_image_url?: string;
-  clothing_name?: string;
   clothing_category?: string;
   job_id?: string;
 };
@@ -26,7 +25,6 @@ export async function POST(request: Request) {
   const {
     clothing_category: clothingCategory,
     clothing_image_url: clothingImageUrl,
-    clothing_name: clothingName,
     job_id: jobId,
     user_photo_url: userPhotoUrl,
   } = body;
@@ -54,10 +52,7 @@ export async function POST(request: Request) {
       throw processingError;
     }
 
-    const garmentDescription = createGarmentDescription(
-      clothingName ?? "",
-      clothingCategory ?? "上衣",
-    );
+    const garmentDescription = createGarmentDescription(clothingCategory ?? "上衣");
     const result = await generateTryOn(
       userPhotoUrl,
       clothingImageUrl,

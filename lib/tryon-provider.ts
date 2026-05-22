@@ -172,30 +172,19 @@ function getReplicateOutputUrl(output: ReplicateOutput | undefined) {
   return output.url ?? "";
 }
 
-export function createGarmentDescription(name: string, category: string) {
-  const categoryName = getEnglishCategoryName(category);
-  const trimmedName = name.trim();
-
-  if (!trimmedName) {
-    return `a ${categoryName}`;
-  }
-
-  return `a ${trimmedName} ${categoryName}`;
-}
-
-function getEnglishCategoryName(category: string) {
-  const categoryNames: Record<string, string> = {
-    上衣: "shirt",
-    裤子: "pants",
-    裙子: "skirt",
-    外套: "jacket",
-    鞋子: "shoes",
-    帽子: "hat",
-    包包: "bag",
-    首饰: "accessory",
+export function createGarmentDescription(category: string) {
+  const descriptions: Record<string, string> = {
+    上衣: "a black shirt",
+    裤子: "a pair of pants",
+    裙子: "a skirt",
+    外套: "a jacket",
+    鞋子: "a pair of shoes",
+    帽子: "a hat",
+    包包: "a bag",
+    首饰: "an accessory",
   };
 
-  return categoryNames[category] ?? "clothing item";
+  return descriptions[category] ?? "a clothing item";
 }
 
 function getReplicateCategory(category: string) {

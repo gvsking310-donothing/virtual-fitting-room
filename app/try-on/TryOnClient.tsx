@@ -134,7 +134,6 @@ export default function TryOnClient() {
           job_id: createdJobId,
           user_photo_url: profile.front_photo_url,
           clothing_image_url: selectedClothing.image_url,
-          clothing_name: selectedClothing.name,
           clothing_category: selectedClothing.category,
         }),
       });
