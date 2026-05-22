@@ -32,8 +32,7 @@ export async function generateMockTryOn(): Promise<TryOnResult> {
 export async function generateReplicateTryOn(
   userPhoto: string,
   clothingPhoto: string,
-  garmentDescription: string,
-  category: string,
+  category = "上衣",
 ): Promise<TryOnResult> {
   const token = process.env.REPLICATE_API_TOKEN;
 
@@ -54,7 +53,7 @@ export async function generateReplicateTryOn(
         input: {
           human_img: userPhoto,
           garm_img: clothingPhoto,
-          garment_des: garmentDescription,
+          garment_des: createGarmentDescription(category),
           category: getReplicateCategory(category),
           crop: true,
           steps: 30,
@@ -64,8 +63,7 @@ export async function generateReplicateTryOn(
   );
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Replicate request failed: ${errorText}`);
+    throw new Error(`Replicate request failed: ${await getReplicateError(response)}`);
   }
 
   const prediction = await waitForReplicatePrediction(
@@ -86,18 +84,12 @@ export async function generateReplicateTryOn(
 export async function generateTryOn(
   userPhoto: string,
   clothingPhoto: string,
-  garmentDescription = "a clothing item",
   category = "上衣",
 ): Promise<TryOnResult> {
   const provider = process.env.TRYON_PROVIDER ?? "mock";
 
   if (provider === "replicate") {
-    return generateReplicateTryOn(
-      userPhoto,
-      clothingPhoto,
-      garmentDescription,
-      category,
-    );
+    return generateReplicateTryOn(userPhoto, clothingPhoto, category);
   }
 
   return generateMockTryOn();
@@ -133,8 +125,7 @@ async function waitForReplicatePrediction(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Replicate polling failed: ${errorText}`);
+      throw new Error(`Replicate polling failed: ${await getReplicateError(response)}`);
     }
 
     const nextPrediction = (await response.json()) as ReplicatePrediction;
@@ -170,6 +161,22 @@ function getReplicateOutputUrl(output: ReplicateOutput | undefined) {
   }
 
   return output.url ?? "";
+}
+
+async function getReplicateError(response: Response) {
+  const errorText = await response.text();
+
+  try {
+    const errorJson = JSON.parse(errorText) as {
+      detail?: string;
+      error?: string;
+      message?: string;
+    };
+
+    return errorJson.detail || errorJson.error || errorJson.message || errorText;
+  } catch {
+    return errorText;
+  }
 }
 
 export function createGarmentDescription(category: string) {

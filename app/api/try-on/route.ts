@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { createGarmentDescription, generateTryOn } from "@/lib/tryon-provider";
+import { generateTryOn } from "@/lib/tryon-provider";
 
 type TryOnRequest = {
   user_photo_url?: string;
@@ -52,12 +52,10 @@ export async function POST(request: Request) {
       throw processingError;
     }
 
-    const garmentDescription = createGarmentDescription(clothingCategory ?? "上衣");
     const result = await generateTryOn(
       userPhotoUrl,
       clothingImageUrl,
-      garmentDescription,
-      clothingCategory,
+      clothingCategory ?? "上衣",
     );
 
     const { error } = await supabase
