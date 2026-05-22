@@ -103,6 +103,7 @@ export default function TryOnClient() {
 
     setIsCreatingJob(true);
     setMessage("");
+    let createdJobId = "";
 
     try {
       const { data, error } = await supabase
@@ -122,13 +123,15 @@ export default function TryOnClient() {
         throw error;
       }
 
+      createdJobId = data.id;
+
       const response = await fetch("/api/try-on", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          job_id: data.id,
+          job_id: createdJobId,
           user_photo_url: profile.front_photo_url,
           clothing_image_url: selectedClothing.image_url,
         }),
@@ -139,10 +142,13 @@ export default function TryOnClient() {
         throw new Error(result.error || "AI试穿任务生成失败。");
       }
 
-      router.push(`/try-on/result?id=${data.id}`);
+      router.push(`/try-on/result?id=${createdJobId}`);
     } catch (error) {
       console.error("Supabase error:", error);
       setMessage(getSupabaseErrorMessage(error));
+      if (createdJobId) {
+        router.push(`/try-on/result?id=${createdJobId}`);
+      }
     } finally {
       setIsCreatingJob(false);
     }

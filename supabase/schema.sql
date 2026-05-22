@@ -33,12 +33,16 @@ create table if not exists public.try_on_jobs (
     status in ('pending', 'processing', 'done', 'failed')
   ),
   result_image_url text,
+  error_message text,
   created_at timestamptz not null default now()
 );
 
 alter table public.users
 add column if not exists front_photo_url text,
 add column if not exists side_photo_url text;
+
+alter table public.try_on_jobs
+add column if not exists error_message text;
 
 alter table public.users enable row level security;
 alter table public.clothes enable row level security;

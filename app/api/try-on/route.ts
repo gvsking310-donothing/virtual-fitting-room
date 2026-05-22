@@ -33,6 +33,19 @@ export async function POST(request: Request) {
   const supabase = getSupabaseServerClient();
 
   try {
+    const { error: processingError } = await supabase
+      .from("try_on_jobs")
+      .update({
+        status: "processing",
+        error_message: null,
+      })
+      .eq("id", jobId);
+
+    if (processingError) {
+      console.error("Supabase error:", processingError);
+      throw processingError;
+    }
+
     const result = await generateTryOn(userPhotoUrl, clothingImageUrl);
 
     const { error } = await supabase
@@ -40,6 +53,7 @@ export async function POST(request: Request) {
       .update({
         status: "done",
         result_image_url: result.result_image_url,
+        error_message: null,
       })
       .eq("id", jobId);
 
@@ -51,17 +65,17 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Try-on API error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Try-on generation failed.";
 
     await supabase
       .from("try_on_jobs")
       .update({
         status: "failed",
+        error_message: errorMessage,
       })
       .eq("id", jobId);
 
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Try-on generation failed." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

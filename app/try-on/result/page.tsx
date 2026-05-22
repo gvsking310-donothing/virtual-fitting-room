@@ -18,10 +18,10 @@ export default function TryOnResultPage() {
         <div className="mt-7 space-y-3">
           <p className="text-sm font-medium text-neutral-500">试穿预览</p>
           <h1 className="text-4xl font-semibold leading-tight tracking-normal text-neutral-950">
-            AI试穿处理中...
+            AI试穿结果
           </h1>
           <p className="text-sm leading-6 text-neutral-600">
-            当前页面先展示已选择的人物照片和衣服图片。
+            页面会自动刷新任务状态，完成后显示真实试穿图。
           </p>
         </div>
 

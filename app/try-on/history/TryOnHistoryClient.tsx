@@ -11,6 +11,7 @@ type TryOnJob = {
   clothing_image_url: string;
   status: "pending" | "processing" | "done" | "failed";
   result_image_url: string | null;
+  error_message: string | null;
   created_at: string;
 };
 
@@ -38,7 +39,7 @@ export default function TryOnHistoryClient() {
         const { data, error } = await supabase
           .from("try_on_jobs")
           .select(
-            "id, user_photo_url, clothing_image_url, status, result_image_url, created_at",
+            "id, user_photo_url, clothing_image_url, status, result_image_url, error_message, created_at",
           )
           .order("created_at", { ascending: false });
 
@@ -115,7 +116,7 @@ export default function TryOnHistoryClient() {
                 />
               ) : (
                 <div className="flex h-full items-center justify-center px-2 text-center text-xs leading-5 text-neutral-500">
-                  结果生成中
+                  {job.status === "failed" ? "生成失败" : "结果生成中"}
                 </div>
               )}
             </div>
@@ -128,6 +129,11 @@ export default function TryOnHistoryClient() {
               <p className="mt-1 text-xs text-neutral-500">
                 {new Date(job.created_at).toLocaleString("zh-CN")}
               </p>
+              {job.status === "failed" && job.error_message ? (
+                <p className="mt-2 line-clamp-2 text-xs leading-5 text-neutral-500">
+                  {job.error_message}
+                </p>
+              ) : null}
             </div>
             <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
               {statusText[job.status]}

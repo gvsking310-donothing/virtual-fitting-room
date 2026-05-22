@@ -11,6 +11,7 @@ type TryOnJob = {
   clothing_image_url: string;
   status: "pending" | "processing" | "done" | "failed";
   result_image_url: string | null;
+  error_message: string | null;
   created_at: string;
 };
 
@@ -42,7 +43,7 @@ export default function TryOnResultClient() {
         const { data, error } = await supabaseClient
           .from("try_on_jobs")
           .select(
-            "id, user_photo_url, clothing_image_url, status, result_image_url, created_at",
+            "id, user_photo_url, clothing_image_url, status, result_image_url, error_message, created_at",
           )
           .eq("id", jobId)
           .single();
@@ -124,14 +125,19 @@ export default function TryOnResultClient() {
             <h2 className="text-sm font-semibold text-neutral-950">试穿结果</h2>
           </div>
         </article>
+      ) : job.status === "failed" ? (
+        <article className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-neutral-950">AI试穿生成失败</p>
+          <p className="mt-3 text-xs leading-5 text-neutral-500">
+            {job.error_message || "Replicate 调用失败，请稍后重试。"}
+          </p>
+        </article>
       ) : (
         <article className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 px-5 py-8 text-center">
           <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-950" />
-          <p className="mt-4 text-sm font-semibold text-neutral-950">
-            {job.status === "failed" ? "AI试穿生成失败" : "AI试穿处理中..."}
-          </p>
+          <p className="mt-4 text-sm font-semibold text-neutral-950">AI试穿处理中...</p>
           <p className="mt-2 text-xs leading-5 text-neutral-500">
-            暂时显示占位结果，真实 AI 试穿结果稍后接入。
+            正在调用 AI 试穿模型，完成后会自动显示结果图。
           </p>
         </article>
       )}

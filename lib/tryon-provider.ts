@@ -6,11 +6,22 @@ type TryOnResult = {
 };
 
 type ReplicatePrediction = {
-  output?: string | string[];
+  id?: string;
+  error?: string;
+  output?: ReplicateOutput;
+  status?:
+    | "starting"
+    | "processing"
+    | "succeeded"
+    | "successful"
+    | "failed"
+    | "canceled";
   urls?: {
     get?: string;
   };
 };
+
+type ReplicateOutput = string | string[] | { url?: string } | { url?: string }[];
 
 export async function generateMockTryOn(): Promise<TryOnResult> {
   return {
@@ -25,9 +36,12 @@ export async function generateReplicateTryOn(
   const token = process.env.REPLICATE_API_TOKEN;
   const version = process.env.REPLICATE_MODEL_VERSION;
 
-  if (!token || !version) {
-    console.warn("Replicate is not fully configured. Falling back to mock try-on.");
-    return generateMockTryOn();
+  if (!token) {
+    throw new Error("REPLICATE_API_TOKEN is not configured.");
+  }
+
+  if (!version) {
+    throw new Error("REPLICATE_MODEL_VERSION is not configured.");
   }
 
   const response = await fetch("https://api.replicate.com/v1/predictions", {
@@ -40,8 +54,9 @@ export async function generateReplicateTryOn(
     body: JSON.stringify({
       version,
       input: {
-        person_image: userPhoto,
-        clothing_image: clothingPhoto,
+        human_img: userPhoto,
+        garm_img: clothingPhoto,
+        crop: true,
       },
     }),
   });
@@ -51,10 +66,11 @@ export async function generateReplicateTryOn(
     throw new Error(`Replicate request failed: ${errorText}`);
   }
 
-  const prediction = (await response.json()) as ReplicatePrediction;
-  const output = Array.isArray(prediction.output)
-    ? prediction.output[0]
-    : prediction.output;
+  const prediction = await waitForReplicatePrediction(
+    (await response.json()) as ReplicatePrediction,
+    token,
+  );
+  const output = getReplicateOutputUrl(prediction.output);
 
   if (!output) {
     throw new Error("Replicate did not return a result image.");
@@ -71,9 +87,78 @@ export async function generateTryOn(
 ): Promise<TryOnResult> {
   const provider = process.env.TRYON_PROVIDER ?? "mock";
 
-  if (provider === "replicate" && process.env.REPLICATE_API_TOKEN) {
+  if (provider === "replicate") {
     return generateReplicateTryOn(userPhoto, clothingPhoto);
   }
 
   return generateMockTryOn();
+}
+
+async function waitForReplicatePrediction(
+  prediction: ReplicatePrediction,
+  token: string,
+): Promise<ReplicatePrediction> {
+  if (prediction.status === "failed" || prediction.status === "canceled") {
+    throw new Error(prediction.error || "Replicate prediction failed.");
+  }
+
+  if (
+    prediction.status === "succeeded" ||
+    prediction.status === "successful" ||
+    prediction.output
+  ) {
+    return prediction;
+  }
+
+  if (!prediction.urls?.get) {
+    return prediction;
+  }
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+
+    const response = await fetch(prediction.urls.get, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Replicate polling failed: ${errorText}`);
+    }
+
+    const nextPrediction = (await response.json()) as ReplicatePrediction;
+
+    if (nextPrediction.status === "failed" || nextPrediction.status === "canceled") {
+      throw new Error(nextPrediction.error || "Replicate prediction failed.");
+    }
+
+    if (
+      nextPrediction.status === "succeeded" ||
+      nextPrediction.status === "successful" ||
+      nextPrediction.output
+    ) {
+      return nextPrediction;
+    }
+  }
+
+  throw new Error("Replicate prediction timed out.");
+}
+
+function getReplicateOutputUrl(output: ReplicateOutput | undefined) {
+  if (!output) {
+    return "";
+  }
+
+  if (typeof output === "string") {
+    return output;
+  }
+
+  if (Array.isArray(output)) {
+    const firstOutput = output[0];
+    return typeof firstOutput === "string" ? firstOutput : firstOutput?.url ?? "";
+  }
+
+  return output.url ?? "";
 }
