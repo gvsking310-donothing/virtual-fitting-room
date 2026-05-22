@@ -16,14 +16,17 @@ export default function TryOnProcessingPage() {
               AI试穿处理中...
             </h1>
             <p className="text-sm leading-6 text-neutral-600">
-              真实 AI 试穿能力即将接入，当前页面用于预览流程。
+              真实 AI 试穿能力即将接入，请前往结果页查看当前选择。
             </p>
           </div>
         </div>
 
-        <div className="rounded-3xl bg-neutral-100 px-5 py-6 text-sm leading-6 text-neutral-600">
-          正在准备人物照片、服装图片和试穿参数。
-        </div>
+        <Link
+          href="/try-on/result"
+          className="flex h-14 w-full items-center justify-center rounded-full bg-neutral-950 text-base font-semibold text-white shadow-lg shadow-neutral-300 transition active:scale-[0.98]"
+        >
+          查看结果页
+        </Link>
       </section>
     </main>
   );

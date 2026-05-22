@@ -47,21 +47,14 @@ export default function TryOnClient() {
         return;
       }
 
-      const userId = localStorage.getItem("virtual-fitting-user-id");
-
-      if (!userId) {
-        setMessage("请先完成用户资料录入。");
-        setIsLoading(false);
-        return;
-      }
-
       try {
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select(
             "id, height_cm, weight_kg, gender, age, avatar_url, front_photo_url",
           )
-          .eq("id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1)
           .single();
 
         if (userError) {
@@ -93,15 +86,18 @@ export default function TryOnClient() {
   }, []);
 
   function startTryOn() {
-    if (!selectedClothing) {
+    if (!selectedClothing || !profile) {
       return;
     }
 
     localStorage.setItem(
-      "virtual-fitting-selected-clothing",
-      JSON.stringify(selectedClothing),
+      "virtual-fitting-try-on-selection",
+      JSON.stringify({
+        profile,
+        clothing: selectedClothing,
+      }),
     );
-    router.push("/try-on/processing");
+    router.push("/try-on/result");
   }
 
   if (isLoading) {
