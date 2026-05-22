@@ -17,6 +17,17 @@ const categories = [
 
 type Category = (typeof categories)[number];
 
+const categoryStorageFolders: Record<Category, string> = {
+  上衣: "tops",
+  裤子: "pants",
+  裙子: "skirts",
+  外套: "outerwear",
+  鞋子: "shoes",
+  帽子: "hats",
+  包包: "bags",
+  首饰: "accessories",
+};
+
 type ClothingItem = {
   id: string;
   name: string;
@@ -51,7 +62,8 @@ async function uploadClothingImage(file: File, category: Category) {
   }
 
   const fileExt = file.name.split(".").pop() ?? "jpg";
-  const filePath = `${category}/${crypto.randomUUID()}.${fileExt}`;
+  const folder = categoryStorageFolders[category];
+  const filePath = `${folder}/${crypto.randomUUID()}.${fileExt}`;
   const { error } = await supabase.storage.from("clothes").upload(filePath, file, {
     cacheControl: "3600",
     upsert: false,
