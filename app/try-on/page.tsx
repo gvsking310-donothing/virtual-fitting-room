@@ -5,9 +5,14 @@ export default function TryOnPage() {
   return (
     <main className="min-h-screen px-5 py-6">
       <section className="page-enter mx-auto w-full max-w-md rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-2xl shadow-neutral-200/80">
-        <Link href="/" className="text-sm font-medium text-neutral-500">
-          返回首页
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/" className="text-sm font-medium text-neutral-500">
+            返回首页
+          </Link>
+          <Link href="/try-on/history" className="text-sm font-medium text-neutral-500">
+            历史记录
+          </Link>
+        </div>
 
         <div className="mt-7 space-y-2">
           <p className="text-sm font-medium text-neutral-500">AI试穿</p>

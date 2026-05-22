@@ -1,40 +1,79 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
+import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 
-type TryOnSelection = {
-  profile: {
-    front_photo_url: string | null;
-  };
-  clothing: {
-    name: string;
-    category: string;
-    brand: string | null;
-    image_url: string;
-  };
+type TryOnJob = {
+  id: string;
+  user_photo_url: string;
+  clothing_image_url: string;
+  status: "pending" | "processing" | "done" | "failed";
+  result_image_url: string | null;
+  created_at: string;
 };
 
 export default function TryOnResultClient() {
-  const [selection, setSelection] = useState<TryOnSelection | null>(null);
+  const searchParams = useSearchParams();
+  const [job, setJob] = useState<TryOnJob | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const savedSelection = localStorage.getItem("virtual-fitting-try-on-selection");
+    async function loadJob() {
+      const jobId = searchParams.get("id");
 
-    if (!savedSelection) {
-      return;
+      if (!jobId) {
+        setMessage("缺少试穿任务 ID。");
+        setIsLoading(false);
+        return;
+      }
+
+      if (!isSupabaseConfigured || !supabase) {
+        setMessage("请先在 Vercel 配置 Supabase 环境变量。");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("try_on_jobs")
+          .select(
+            "id, user_photo_url, clothing_image_url, status, result_image_url, created_at",
+          )
+          .eq("id", jobId)
+          .single();
+
+        if (error) {
+          console.error("Supabase error:", error);
+          throw error;
+        }
+
+        setJob(data);
+      } catch (error) {
+        console.error("Supabase error:", error);
+        setMessage(getSupabaseErrorMessage(error));
+      } finally {
+        setIsLoading(false);
+      }
     }
 
-    try {
-      setSelection(JSON.parse(savedSelection) as TryOnSelection);
-    } catch (error) {
-      console.error("Try-on selection parse error:", error);
-    }
-  }, []);
+    loadJob();
+  }, [searchParams]);
 
-  if (!selection) {
+  if (isLoading) {
+    return (
+      <div className="mt-8 rounded-3xl bg-neutral-100 px-5 py-8 text-sm text-neutral-600">
+        正在读取试穿任务...
+      </div>
+    );
+  }
+
+  if (!job) {
     return (
       <p className="mt-8 rounded-2xl bg-neutral-100 px-4 py-3 text-sm leading-6 text-neutral-600">
-        暂无试穿选择，请返回选择衣服。
+        {message || "暂无试穿任务，请返回选择衣服。"}
       </p>
     );
   }
@@ -43,17 +82,11 @@ export default function TryOnResultClient() {
     <div className="mt-8 space-y-5">
       <article className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
         <div className="relative min-h-96 bg-neutral-100">
-          {selection.profile.front_photo_url ? (
-            <img
-              src={selection.profile.front_photo_url}
-              alt="已选择的人物照片"
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex min-h-96 items-center justify-center px-6 text-center text-sm leading-6 text-neutral-500">
-              暂无人物照片
-            </div>
-          )}
+          <img
+            src={job.user_photo_url}
+            alt="已选择的人物照片"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
         </div>
         <div className="p-4">
           <h2 className="text-sm font-semibold text-neutral-950">已选择的人物照片</h2>
@@ -63,22 +96,23 @@ export default function TryOnResultClient() {
       <article className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
         <div className="relative aspect-[3/4] bg-neutral-100">
           <img
-            src={selection.clothing.image_url}
-            alt={selection.clothing.name}
+            src={job.clothing_image_url}
+            alt="已选择的衣服图片"
             className="h-full w-full object-cover"
           />
-          <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-neutral-950">
-            {selection.clothing.category}
-          </span>
         </div>
-        <div className="space-y-1 p-4">
-          <h2 className="text-sm font-semibold text-neutral-950">
-            {selection.clothing.name}
-          </h2>
-          {selection.clothing.brand ? (
-            <p className="text-xs text-neutral-500">{selection.clothing.brand}</p>
-          ) : null}
+        <div className="p-4">
+          <h2 className="text-sm font-semibold text-neutral-950">已选择的衣服图片</h2>
         </div>
+      </article>
+
+      <article className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 px-5 py-8 text-center">
+        <p className="text-sm font-semibold text-neutral-950">
+          {job.status === "processing" ? "AI试穿处理中..." : job.status}
+        </p>
+        <p className="mt-2 text-xs leading-5 text-neutral-500">
+          暂时显示占位结果，真实 AI 试穿结果稍后接入。
+        </p>
       </article>
     </div>
   );

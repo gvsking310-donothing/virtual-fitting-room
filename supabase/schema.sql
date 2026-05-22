@@ -23,12 +23,26 @@ create table if not exists public.clothes (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.try_on_jobs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.users(id),
+  clothing_id uuid references public.clothes(id),
+  user_photo_url text not null,
+  clothing_image_url text not null,
+  status text not null default 'pending' check (
+    status in ('pending', 'processing', 'done', 'failed')
+  ),
+  result_image_url text,
+  created_at timestamptz not null default now()
+);
+
 alter table public.users
 add column if not exists front_photo_url text,
 add column if not exists side_photo_url text;
 
 alter table public.users enable row level security;
 alter table public.clothes enable row level security;
+alter table public.try_on_jobs enable row level security;
 
 insert into storage.buckets (id, name, public)
 values ('avatars', 'avatars', true)
@@ -48,6 +62,9 @@ drop policy if exists "Allow anonymous profile photo updates" on public.users;
 drop policy if exists "Allow anonymous clothes inserts" on public.clothes;
 drop policy if exists "Allow anonymous clothes reads" on public.clothes;
 drop policy if exists "Allow anonymous clothes deletes" on public.clothes;
+drop policy if exists "Allow anonymous try on job inserts" on public.try_on_jobs;
+drop policy if exists "Allow anonymous try on job reads" on public.try_on_jobs;
+drop policy if exists "Allow anonymous try on job updates" on public.try_on_jobs;
 drop policy if exists "Allow anonymous avatar uploads" on storage.objects;
 drop policy if exists "Allow anonymous body photo uploads" on storage.objects;
 drop policy if exists "Allow anonymous clothes uploads" on storage.objects;
@@ -92,6 +109,25 @@ on public.clothes
 for delete
 to anon
 using (true);
+
+create policy "Allow anonymous try on job inserts"
+on public.try_on_jobs
+for insert
+to anon
+with check (true);
+
+create policy "Allow anonymous try on job reads"
+on public.try_on_jobs
+for select
+to anon
+using (true);
+
+create policy "Allow anonymous try on job updates"
+on public.try_on_jobs
+for update
+to anon
+using (true)
+with check (true);
 
 create policy "Allow anonymous avatar uploads"
 on storage.objects

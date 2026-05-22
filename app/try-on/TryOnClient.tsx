@@ -30,6 +30,7 @@ export default function TryOnClient() {
   const [clothes, setClothes] = useState<ClothingItem[]>([]);
   const [selectedClothingId, setSelectedClothingId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [message, setMessage] = useState("");
 
   const selectedClothing = useMemo(
@@ -85,19 +86,49 @@ export default function TryOnClient() {
     loadTryOnData();
   }, []);
 
-  function startTryOn() {
+  async function startTryOn() {
     if (!selectedClothing || !profile) {
       return;
     }
 
-    localStorage.setItem(
-      "virtual-fitting-try-on-selection",
-      JSON.stringify({
-        profile,
-        clothing: selectedClothing,
-      }),
-    );
-    router.push("/try-on/result");
+    if (!profile.front_photo_url) {
+      setMessage("请先上传正面全身照片。");
+      return;
+    }
+
+    if (!supabase) {
+      setMessage("Supabase 未配置。");
+      return;
+    }
+
+    setIsCreatingJob(true);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase
+        .from("try_on_jobs")
+        .insert({
+          user_id: profile.id,
+          clothing_id: selectedClothing.id,
+          user_photo_url: profile.front_photo_url,
+          clothing_image_url: selectedClothing.image_url,
+          status: "processing",
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
+
+      router.push(`/try-on/result?id=${data.id}`);
+    } catch (error) {
+      console.error("Supabase error:", error);
+      setMessage(getSupabaseErrorMessage(error));
+    } finally {
+      setIsCreatingJob(false);
+    }
   }
 
   if (isLoading) {
@@ -214,9 +245,10 @@ export default function TryOnClient() {
         <button
           type="button"
           onClick={startTryOn}
-          className="h-14 w-full rounded-full bg-neutral-950 text-base font-semibold text-white shadow-lg shadow-neutral-300 transition active:scale-[0.98]"
+          disabled={isCreatingJob}
+          className="h-14 w-full rounded-full bg-neutral-950 text-base font-semibold text-white shadow-lg shadow-neutral-300 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-neutral-400"
         >
-          开始AI试穿
+          {isCreatingJob ? "创建任务中..." : "开始AI试穿"}
         </button>
       ) : null}
     </div>
