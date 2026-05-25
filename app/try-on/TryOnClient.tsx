@@ -24,19 +24,95 @@ type ClothingItem = {
   created_at: string;
 };
 
+type OutfitSlot = "top" | "pants" | "shoes" | "hat" | "bag";
+
+type OutfitSelection = Record<OutfitSlot, string>;
+
+type OutfitSnapshot = {
+  id: string;
+  name: string;
+  category: string;
+  brand: string | null;
+  image_url: string;
+  slot: OutfitSlot;
+};
+
+type SavedOutfit = {
+  id: string;
+  name: string;
+  items: OutfitSnapshot[];
+  created_at: string;
+};
+
+const emptyOutfitSelection: OutfitSelection = {
+  top: "",
+  pants: "",
+  shoes: "",
+  hat: "",
+  bag: "",
+};
+
+const outfitSlots: Array<{ key: OutfitSlot; label: string; categories: string[] }> = [
+  { key: "top", label: "上衣", categories: ["上衣", "外套"] },
+  { key: "pants", label: "裤子", categories: ["裤子"] },
+  { key: "shoes", label: "鞋子", categories: ["鞋子"] },
+  { key: "hat", label: "帽子", categories: ["帽子"] },
+  { key: "bag", label: "包包", categories: ["包包"] },
+];
+
+function getOutfitSlot(category: string): OutfitSlot | null {
+  return outfitSlots.find((slot) => slot.categories.includes(category))?.key ?? null;
+}
+
+function createOutfitSnapshot(item: ClothingItem): OutfitSnapshot | null {
+  const slot = getOutfitSlot(item.category);
+
+  if (!slot) {
+    return null;
+  }
+
+  return {
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    brand: item.brand,
+    image_url: item.image_url,
+    slot,
+  };
+}
+
 export default function TryOnClient() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [clothes, setClothes] = useState<ClothingItem[]>([]);
+  const [outfits, setOutfits] = useState<SavedOutfit[]>([]);
   const [selectedClothingId, setSelectedClothingId] = useState("");
+  const [outfitSelection, setOutfitSelection] =
+    useState<OutfitSelection>(emptyOutfitSelection);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingJob, setIsCreatingJob] = useState(false);
+  const [isSavingOutfit, setIsSavingOutfit] = useState(false);
   const [message, setMessage] = useState("");
 
   const selectedClothing = useMemo(
     () => clothes.find((item) => item.id === selectedClothingId) ?? null,
     [clothes, selectedClothingId],
   );
+
+  const selectedOutfitItems = useMemo(
+    () =>
+      outfitSlots
+        .map((slot) => {
+          const item = clothes.find(
+            (clothing) => clothing.id === outfitSelection[slot.key],
+          );
+          return item ? createOutfitSnapshot(item) : null;
+        })
+        .filter((item): item is OutfitSnapshot => Boolean(item)),
+    [clothes, outfitSelection],
+  );
+
+  const hasSelectedOutfit = selectedOutfitItems.length > 0;
 
   useEffect(() => {
     async function loadTryOnData() {
@@ -73,8 +149,20 @@ export default function TryOnClient() {
           throw clothesError;
         }
 
+        const { data: outfitData, error: outfitError } = await supabase
+          .from("outfit")
+          .select("id, name, items, created_at")
+          .eq("user_id", userData.id)
+          .order("created_at", { ascending: false });
+
+        if (outfitError) {
+          console.error("Supabase error:", outfitError);
+          throw outfitError;
+        }
+
         setProfile(userData);
         setClothes(clothesData ?? []);
+        setOutfits((outfitData ?? []) as SavedOutfit[]);
       } catch (error) {
         console.error("Supabase error:", error);
         setMessage(getSupabaseErrorMessage(error));
@@ -85,6 +173,82 @@ export default function TryOnClient() {
 
     loadTryOnData();
   }, []);
+
+  function selectClothing(item: ClothingItem) {
+    const slot = getOutfitSlot(item.category);
+    setSelectedClothingId((currentId) => (currentId === item.id ? "" : item.id));
+
+    if (!slot) {
+      return;
+    }
+
+    setOutfitSelection((current) => ({
+      ...current,
+      [slot]: current[slot] === item.id ? "" : item.id,
+    }));
+  }
+
+  function applySavedOutfit(outfit: SavedOutfit) {
+    const nextSelection = { ...emptyOutfitSelection };
+
+    outfit.items.forEach((item) => {
+      nextSelection[item.slot] = item.id;
+    });
+
+    setOutfitSelection(nextSelection);
+    setSelectedClothingId(outfit.items[0]?.id ?? "");
+    setMessage("已套用穿搭。");
+  }
+
+  async function saveOutfit() {
+    if (!profile) {
+      setMessage("请先完成用户资料。");
+      return;
+    }
+
+    if (!hasSelectedOutfit) {
+      setMessage("请先选择至少一件单品。");
+      return;
+    }
+
+    if (!supabase) {
+      setMessage("Supabase 未配置。");
+      return;
+    }
+
+    setIsSavingOutfit(true);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase
+        .from("outfit")
+        .insert({
+          user_id: profile.id,
+          name: `我的穿搭 ${outfits.length + 1}`,
+          top_id: outfitSelection.top || null,
+          pants_id: outfitSelection.pants || null,
+          shoes_id: outfitSelection.shoes || null,
+          hat_id: outfitSelection.hat || null,
+          bag_id: outfitSelection.bag || null,
+          items: selectedOutfitItems,
+        })
+        .select("id, name, items, created_at")
+        .single();
+
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
+
+      setOutfits((current) => [data as SavedOutfit, ...current]);
+      setMessage("已保存到我的穿搭。");
+    } catch (error) {
+      console.error("Supabase error:", error);
+      setMessage(getSupabaseErrorMessage(error));
+    } finally {
+      setIsSavingOutfit(false);
+    }
+  }
 
   async function startTryOn() {
     if (!selectedClothing || !profile) {
@@ -214,6 +378,106 @@ export default function TryOnClient() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-neutral-950">整套搭配预览</h2>
+          <span className="text-xs text-neutral-500">
+            {selectedOutfitItems.length} 件
+          </span>
+        </div>
+
+        <div className="grid grid-cols-5 gap-2">
+          {outfitSlots.map((slot) => {
+            const item = selectedOutfitItems.find(
+              (outfitItem) => outfitItem.slot === slot.key,
+            );
+
+            return (
+              <div
+                key={slot.key}
+                className="min-h-24 overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50"
+              >
+                {item ? (
+                  <img
+                    src={item.image_url}
+                    alt={item.name}
+                    className="h-24 w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-24 items-center justify-center px-1 text-center text-xs text-neutral-400">
+                    {slot.label}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {hasSelectedOutfit ? (
+          <button
+            type="button"
+            onClick={saveOutfit}
+            disabled={isSavingOutfit}
+            className="h-12 w-full rounded-full border border-neutral-200 text-sm font-semibold text-neutral-950 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:text-neutral-400"
+          >
+            {isSavingOutfit ? "保存中..." : "保存到我的穿搭"}
+          </button>
+        ) : null}
+      </section>
+
+      {outfits.length > 0 ? (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-neutral-950">我的穿搭</h2>
+            <span className="text-xs text-neutral-500">{outfits.length} 套</span>
+          </div>
+
+          <div className="space-y-3">
+            {outfits.map((outfit) => (
+              <button
+                key={outfit.id}
+                type="button"
+                onClick={() => applySavedOutfit(outfit)}
+                className="w-full overflow-hidden rounded-3xl border border-neutral-200 bg-white text-left shadow-lg shadow-neutral-200/60 transition active:scale-[0.99]"
+              >
+                <div className="grid grid-cols-5 gap-px bg-neutral-200">
+                  {outfitSlots.map((slot) => {
+                    const item = outfit.items.find(
+                      (outfitItem) => outfitItem.slot === slot.key,
+                    );
+
+                    return (
+                      <div key={slot.key} className="aspect-square bg-neutral-100">
+                        {item ? (
+                          <img
+                            src={item.image_url}
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-neutral-950">
+                      {outfit.name}
+                    </p>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      {new Date(outfit.created_at).toLocaleString("zh-CN")}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
+                    套用
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-neutral-950">选择衣服</h2>
           <span className="text-xs text-neutral-500">{clothes.length} 件</span>
         </div>
@@ -221,13 +485,16 @@ export default function TryOnClient() {
         {clothes.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
             {clothes.map((item) => {
-              const isSelected = item.id === selectedClothingId;
+              const slot = getOutfitSlot(item.category);
+              const isSelected =
+                item.id === selectedClothingId ||
+                Boolean(slot && outfitSelection[slot] === item.id);
 
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setSelectedClothingId(item.id)}
+                  onClick={() => selectClothing(item)}
                   className={`overflow-hidden rounded-3xl border bg-white text-left shadow-lg shadow-neutral-200/60 transition active:scale-[0.98] ${
                     isSelected
                       ? "border-neutral-950 ring-2 ring-neutral-950"
