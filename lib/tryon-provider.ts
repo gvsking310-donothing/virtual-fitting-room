@@ -1,3 +1,5 @@
+import Replicate from "replicate";
+
 const MOCK_RESULT_IMAGE_URL =
   "https://placehold.co/600x900?text=AI+Try+On+Result";
 
@@ -5,23 +7,11 @@ type TryOnResult = {
   result_image_url: string;
 };
 
-type ReplicatePrediction = {
-  id?: string;
-  error?: string;
-  output?: ReplicateOutput;
-  status?:
-    | "starting"
-    | "processing"
-    | "succeeded"
-    | "successful"
-    | "failed"
-    | "canceled";
-  urls?: {
-    get?: string;
-  };
-};
-
-type ReplicateOutput = string | string[] | { url?: string } | { url?: string }[];
+type ReplicateOutput =
+  | string
+  | URL
+  | { url?: string | URL | (() => string | URL) }
+  | Array<string | URL | { url?: string | URL | (() => string | URL) }>;
 
 export async function generateMockTryOn(): Promise<TryOnResult> {
   return {
@@ -40,44 +30,26 @@ export async function generateReplicateTryOn(
     throw new Error("REPLICATE_API_TOKEN is not configured.");
   }
 
-  const response = await fetch(
-    "https://api.replicate.com/v1/models/cuuupid/idm-vton/predictions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${token}`,
-        "Content-Type": "application/json",
-        Prefer: "wait",
-      },
-      body: JSON.stringify({
-        input: {
-          human_img: userPhoto,
-          garm_img: clothingPhoto,
-          garment_des: createGarmentDescription(category),
-          category: getReplicateCategory(category),
-          crop: true,
-          steps: 30,
-        },
-      }),
+  const replicate = new Replicate({ auth: token });
+  const output = (await replicate.run("cuuupid/idm-vton", {
+    input: {
+      human_img: userPhoto,
+      garm_img: clothingPhoto,
+      garment_des: createGarmentDescription(category),
+      category: getReplicateCategory(category),
+      crop: true,
+      steps: 30,
     },
-  );
+    wait: { mode: "block", timeout: 90 },
+  })) as ReplicateOutput;
+  const resultImageUrl = getReplicateOutputUrl(output);
 
-  if (!response.ok) {
-    throw new Error(`Replicate request failed: ${await getReplicateError(response)}`);
-  }
-
-  const prediction = await waitForReplicatePrediction(
-    (await response.json()) as ReplicatePrediction,
-    token,
-  );
-  const output = getReplicateOutputUrl(prediction.output);
-
-  if (!output) {
+  if (!resultImageUrl) {
     throw new Error("Replicate did not return a result image.");
   }
 
   return {
-    result_image_url: output,
+    result_image_url: resultImageUrl,
   };
 }
 
@@ -95,57 +67,6 @@ export async function generateTryOn(
   return generateMockTryOn();
 }
 
-async function waitForReplicatePrediction(
-  prediction: ReplicatePrediction,
-  token: string,
-): Promise<ReplicatePrediction> {
-  if (prediction.status === "failed" || prediction.status === "canceled") {
-    throw new Error(prediction.error || "Replicate prediction failed.");
-  }
-
-  if (
-    prediction.status === "succeeded" ||
-    prediction.status === "successful" ||
-    prediction.output
-  ) {
-    return prediction;
-  }
-
-  if (!prediction.urls?.get) {
-    return prediction;
-  }
-
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-
-    const response = await fetch(prediction.urls.get, {
-      headers: {
-        Authorization: `Token ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Replicate polling failed: ${await getReplicateError(response)}`);
-    }
-
-    const nextPrediction = (await response.json()) as ReplicatePrediction;
-
-    if (nextPrediction.status === "failed" || nextPrediction.status === "canceled") {
-      throw new Error(nextPrediction.error || "Replicate prediction failed.");
-    }
-
-    if (
-      nextPrediction.status === "succeeded" ||
-      nextPrediction.status === "successful" ||
-      nextPrediction.output
-    ) {
-      return nextPrediction;
-    }
-  }
-
-  throw new Error("Replicate prediction timed out.");
-}
-
 function getReplicateOutputUrl(output: ReplicateOutput | undefined) {
   if (!output) {
     return "";
@@ -155,28 +76,20 @@ function getReplicateOutputUrl(output: ReplicateOutput | undefined) {
     return output;
   }
 
+  if (output instanceof URL) {
+    return output.toString();
+  }
+
   if (Array.isArray(output)) {
     const firstOutput = output[0];
-    return typeof firstOutput === "string" ? firstOutput : firstOutput?.url ?? "";
+    return getReplicateOutputUrl(firstOutput);
   }
 
-  return output.url ?? "";
-}
-
-async function getReplicateError(response: Response) {
-  const errorText = await response.text();
-
-  try {
-    const errorJson = JSON.parse(errorText) as {
-      detail?: string;
-      error?: string;
-      message?: string;
-    };
-
-    return errorJson.detail || errorJson.error || errorJson.message || errorText;
-  } catch {
-    return errorText;
+  if (typeof output.url === "function") {
+    return output.url().toString();
   }
+
+  return output.url?.toString() ?? "";
 }
 
 export function createGarmentDescription(category: string) {
