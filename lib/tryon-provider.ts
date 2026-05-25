@@ -40,7 +40,6 @@ export async function generateReplicateTryOn(
       crop: true,
       steps: 30,
     },
-    wait: { mode: "block", timeout: 90 },
   })) as ReplicateOutput;
   const resultImageUrl = getReplicateOutputUrl(output);
 
