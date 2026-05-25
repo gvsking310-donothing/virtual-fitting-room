@@ -45,7 +45,7 @@ export async function generateReplicateTryOn(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Token ${token}`,
         "Content-Type": "application/json",
         Prefer: "wait",
       },
@@ -120,7 +120,7 @@ async function waitForReplicatePrediction(
 
     const response = await fetch(prediction.urls.get, {
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Token ${token}`,
       },
     });
 

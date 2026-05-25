@@ -9,6 +9,16 @@ type TryOnRequest = {
   job_id?: string;
 };
 
+function getReplicateDebugInfo() {
+  const token = process.env.REPLICATE_API_TOKEN ?? "";
+
+  return {
+    hasToken: token.length > 0,
+    tokenPrefix: token.slice(0, 3),
+    tokenLength: token.length,
+  };
+}
+
 function getSupabaseServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -21,6 +31,7 @@ function getSupabaseServerClient() {
 }
 
 export async function POST(request: Request) {
+  const replicateDebug = getReplicateDebugInfo();
   const body = (await request.json()) as TryOnRequest;
   const {
     clothing_category: clothingCategory,
@@ -72,7 +83,10 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      debug: replicateDebug,
+    });
   } catch (error) {
     console.error("Try-on API error:", error);
     const errorMessage =
@@ -86,6 +100,12 @@ export async function POST(request: Request) {
       })
       .eq("id", jobId);
 
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: errorMessage,
+        debug: replicateDebug,
+      },
+      { status: 500 },
+    );
   }
 }
