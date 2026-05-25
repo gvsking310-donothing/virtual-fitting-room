@@ -57,11 +57,9 @@ export async function generateTryOn(
   clothingPhoto: string,
   category = "上衣",
 ): Promise<TryOnResult> {
-  const provider = process.env.TRYON_PROVIDER ?? "mock";
-
-  if (provider === "replicate") {
-    return generateReplicateTryOn(userPhoto, clothingPhoto, category);
-  }
+  void userPhoto;
+  void clothingPhoto;
+  void category;
 
   return generateMockTryOn();
 }
