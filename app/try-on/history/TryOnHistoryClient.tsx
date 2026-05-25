@@ -108,7 +108,7 @@ export default function TryOnHistoryClient() {
               />
             </div>
             <div className="aspect-[3/4] bg-neutral-100">
-              {job.result_image_url ? (
+              {job.status === "done" && job.result_image_url ? (
                 <img
                   src={job.result_image_url}
                   alt="试穿结果"
@@ -116,7 +116,11 @@ export default function TryOnHistoryClient() {
                 />
               ) : (
                 <div className="flex h-full items-center justify-center px-2 text-center text-xs leading-5 text-neutral-500">
-                  {job.status === "failed" ? "生成失败" : "结果生成中"}
+                  {job.status === "done"
+                    ? "暂无结果图"
+                    : job.status === "failed"
+                      ? "生成失败"
+                      : "结果生成中"}
                 </div>
               )}
             </div>

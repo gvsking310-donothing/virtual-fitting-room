@@ -112,7 +112,15 @@ export default function TryOnResultClient() {
         </div>
       </article>
 
-      {job.status === "done" && job.result_image_url ? (
+      {job.status === "processing" || job.status === "pending" ? (
+        <article className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 px-5 py-8 text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-950" />
+          <p className="mt-4 text-sm font-semibold text-neutral-950">AI试穿处理中...</p>
+          <p className="mt-2 text-xs leading-5 text-neutral-500">
+            正在生成试穿结果，完成后会自动显示图片。
+          </p>
+        </article>
+      ) : job.status === "done" && job.result_image_url ? (
         <article className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
           <div className="relative aspect-[2/3] bg-neutral-100">
             <img
@@ -125,6 +133,13 @@ export default function TryOnResultClient() {
             <h2 className="text-sm font-semibold text-neutral-950">试穿结果</h2>
           </div>
         </article>
+      ) : job.status === "done" ? (
+        <article className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-neutral-950">暂无结果图</p>
+          <p className="mt-2 text-xs leading-5 text-neutral-500">
+            任务已完成，但没有返回可显示的图片地址。
+          </p>
+        </article>
       ) : job.status === "failed" ? (
         <article className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-8 text-center">
           <p className="text-sm font-semibold text-neutral-950">AI试穿生成失败</p>
@@ -133,12 +148,8 @@ export default function TryOnResultClient() {
           </p>
         </article>
       ) : (
-        <article className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 px-5 py-8 text-center">
-          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-950" />
-          <p className="mt-4 text-sm font-semibold text-neutral-950">AI试穿处理中...</p>
-          <p className="mt-2 text-xs leading-5 text-neutral-500">
-            正在调用 AI 试穿模型，完成后会自动显示结果图。
-          </p>
+        <article className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-neutral-950">暂无试穿状态</p>
         </article>
       )}
     </div>

@@ -1,7 +1,6 @@
 import Replicate from "replicate";
 
-const MOCK_RESULT_IMAGE_URL =
-  "https://placehold.co/600x900?text=AI+Try+On+Result";
+const MOCK_RESULT_IMAGE_URL = "/mock-tryon-result.svg";
 
 type TryOnResult = {
   result_image_url: string;
