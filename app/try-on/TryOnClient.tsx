@@ -43,8 +43,8 @@ type SavedOutfit = {
   top_id: string | null;
   pants_id: string | null;
   shoes_id: string | null;
-  hats_id: string | null;
-  bags_id: string | null;
+  hat_id: string | null;
+  bag_id: string | null;
   items: OutfitSnapshot[];
   created_at: string;
 };
@@ -91,8 +91,8 @@ function getOutfitItemsFromIds(outfit: SavedOutfit, clothes: ClothingItem[]) {
     top: outfit.top_id ?? "",
     pants: outfit.pants_id ?? "",
     shoes: outfit.shoes_id ?? "",
-    hats: outfit.hats_id ?? "",
-    bags: outfit.bags_id ?? "",
+    hats: outfit.hat_id ?? "",
+    bags: outfit.bag_id ?? "",
   };
 
   return outfitSlots
@@ -145,7 +145,7 @@ export default function TryOnClient() {
     const { data, error } = await supabase
       .from("outfit")
       .select(
-        "id, name, top_id, pants_id, shoes_id, hats_id, bags_id, items, created_at",
+        "id, name, top_id, pants_id, shoes_id, hat_id, bag_id, items, created_at",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
@@ -246,8 +246,8 @@ export default function TryOnClient() {
         top: outfit.top_id ?? "",
         pants: outfit.pants_id ?? "",
         shoes: outfit.shoes_id ?? "",
-        hats: outfit.hats_id ?? "",
-        bags: outfit.bags_id ?? "",
+        hats: outfit.hat_id ?? "",
+        bags: outfit.bag_id ?? "",
       };
 
       if (!Object.values(nextSelection).some(Boolean)) {
@@ -294,8 +294,8 @@ export default function TryOnClient() {
           top_id: outfitSelection.top || null,
           pants_id: outfitSelection.pants || null,
           shoes_id: outfitSelection.shoes || null,
-          hats_id: outfitSelection.hats || null,
-          bags_id: outfitSelection.bags || null,
+          hat_id: outfitSelection.hats || null,
+          bag_id: outfitSelection.bags || null,
           items: selectedOutfitItems,
         })
 
