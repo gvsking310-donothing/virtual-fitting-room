@@ -44,8 +44,8 @@ create table if not exists public.outfit (
   top_id uuid references public.clothes(id),
   pants_id uuid references public.clothes(id),
   shoes_id uuid references public.clothes(id),
-  hat_id uuid references public.clothes(id),
-  bag_id uuid references public.clothes(id),
+  hats_id uuid references public.clothes(id),
+  bags_id uuid references public.clothes(id),
   items jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
@@ -56,6 +56,14 @@ add column if not exists side_photo_url text;
 
 alter table public.try_on_jobs
 add column if not exists error_message text;
+
+alter table public.outfit
+add column if not exists top_id uuid references public.clothes(id),
+add column if not exists pants_id uuid references public.clothes(id),
+add column if not exists shoes_id uuid references public.clothes(id),
+add column if not exists hats_id uuid references public.clothes(id),
+add column if not exists bags_id uuid references public.clothes(id),
+add column if not exists items jsonb not null default '[]'::jsonb;
 
 alter table public.users enable row level security;
 alter table public.clothes enable row level security;

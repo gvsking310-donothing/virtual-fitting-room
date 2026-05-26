@@ -24,7 +24,7 @@ type ClothingItem = {
   created_at: string;
 };
 
-type OutfitSlot = "top" | "pants" | "shoes" | "hat" | "bag";
+type OutfitSlot = "top" | "pants" | "shoes" | "hats" | "bags";
 
 type OutfitSelection = Record<OutfitSlot, string>;
 
@@ -40,6 +40,11 @@ type OutfitSnapshot = {
 type SavedOutfit = {
   id: string;
   name: string;
+  top_id: string | null;
+  pants_id: string | null;
+  shoes_id: string | null;
+  hats_id: string | null;
+  bags_id: string | null;
   items: OutfitSnapshot[];
   created_at: string;
 };
@@ -48,16 +53,16 @@ const emptyOutfitSelection: OutfitSelection = {
   top: "",
   pants: "",
   shoes: "",
-  hat: "",
-  bag: "",
+  hats: "",
+  bags: "",
 };
 
 const outfitSlots: Array<{ key: OutfitSlot; label: string; categories: string[] }> = [
   { key: "top", label: "上衣", categories: ["上衣", "外套"] },
   { key: "pants", label: "裤子", categories: ["裤子"] },
   { key: "shoes", label: "鞋子", categories: ["鞋子"] },
-  { key: "hat", label: "帽子", categories: ["帽子"] },
-  { key: "bag", label: "包包", categories: ["包包"] },
+  { key: "hats", label: "帽子", categories: ["帽子"] },
+  { key: "bags", label: "包包", categories: ["包包"] },
 ];
 
 function getOutfitSlot(category: string): OutfitSlot | null {
@@ -81,6 +86,23 @@ function createOutfitSnapshot(item: ClothingItem): OutfitSnapshot | null {
   };
 }
 
+function getOutfitItemsFromIds(outfit: SavedOutfit, clothes: ClothingItem[]) {
+  const idsBySlot: OutfitSelection = {
+    top: outfit.top_id ?? "",
+    pants: outfit.pants_id ?? "",
+    shoes: outfit.shoes_id ?? "",
+    hats: outfit.hats_id ?? "",
+    bags: outfit.bags_id ?? "",
+  };
+
+  return outfitSlots
+    .map((slot) => {
+      const item = clothes.find((clothing) => clothing.id === idsBySlot[slot.key]);
+      return item ? createOutfitSnapshot(item) : null;
+    })
+    .filter((item): item is OutfitSnapshot => Boolean(item));
+}
+
 export default function TryOnClient() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -93,6 +115,7 @@ export default function TryOnClient() {
   const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [isSavingOutfit, setIsSavingOutfit] = useState(false);
   const [message, setMessage] = useState("");
+  const [toast, setToast] = useState("");
 
   const selectedClothing = useMemo(
     () => clothes.find((item) => item.id === selectedClothingId) ?? null,
@@ -113,6 +136,36 @@ export default function TryOnClient() {
   );
 
   const hasSelectedOutfit = selectedOutfitItems.length > 0;
+
+  async function loadOutfits(userId: string, clothingItems = clothes) {
+    if (!supabase) {
+      throw new Error("Supabase 未配置。");
+    }
+
+    const { data, error } = await supabase
+      .from("outfit")
+      .select(
+        "id, name, top_id, pants_id, shoes_id, hats_id, bags_id, items, created_at",
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Supabase outfit load error:", error);
+      throw error;
+    }
+
+    const normalizedOutfits = ((data ?? []) as SavedOutfit[]).map((outfit) => ({
+      ...outfit,
+      items:
+        outfit.items?.length > 0
+          ? outfit.items
+          : getOutfitItemsFromIds(outfit, clothingItems),
+    }));
+
+    setOutfits(normalizedOutfits);
+    return normalizedOutfits;
+  }
 
   useEffect(() => {
     async function loadTryOnData() {
@@ -149,22 +202,11 @@ export default function TryOnClient() {
           throw clothesError;
         }
 
-        const { data: outfitData, error: outfitError } = await supabase
-          .from("outfit")
-          .select("id, name, items, created_at")
-          .eq("user_id", userData.id)
-          .order("created_at", { ascending: false });
-
-        if (outfitError) {
-          console.error("Supabase error:", outfitError);
-          throw outfitError;
-        }
-
         setProfile(userData);
         setClothes(clothesData ?? []);
-        setOutfits((outfitData ?? []) as SavedOutfit[]);
+        await loadOutfits(userData.id, clothesData ?? []);
       } catch (error) {
-        console.error("Supabase error:", error);
+        console.error("Supabase load try-on data error:", error);
         setMessage(getSupabaseErrorMessage(error));
       } finally {
         setIsLoading(false);
@@ -173,6 +215,16 @@ export default function TryOnClient() {
 
     loadTryOnData();
   }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setToast(""), 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
 
   function selectClothing(item: ClothingItem) {
     const slot = getOutfitSlot(item.category);
@@ -189,15 +241,29 @@ export default function TryOnClient() {
   }
 
   function applySavedOutfit(outfit: SavedOutfit) {
-    const nextSelection = { ...emptyOutfitSelection };
+    try {
+      const nextSelection: OutfitSelection = {
+        top: outfit.top_id ?? "",
+        pants: outfit.pants_id ?? "",
+        shoes: outfit.shoes_id ?? "",
+        hats: outfit.hats_id ?? "",
+        bags: outfit.bags_id ?? "",
+      };
 
-    outfit.items.forEach((item) => {
-      nextSelection[item.slot] = item.id;
-    });
+      if (!Object.values(nextSelection).some(Boolean)) {
+        outfit.items.forEach((item) => {
+          nextSelection[item.slot] = item.id;
+        });
+      }
 
-    setOutfitSelection(nextSelection);
-    setSelectedClothingId(outfit.items[0]?.id ?? "");
-    setMessage("已套用穿搭。");
+      setOutfitSelection(nextSelection);
+      setSelectedClothingId(Object.values(nextSelection).find(Boolean) ?? "");
+      setMessage("");
+      setToast("已套用穿搭");
+    } catch (error) {
+      console.error("Apply outfit error:", error);
+      setMessage(error instanceof Error ? error.message : "套用穿搭失败。");
+    }
   }
 
   async function saveOutfit() {
@@ -220,7 +286,7 @@ export default function TryOnClient() {
     setMessage("");
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("outfit")
         .insert({
           user_id: profile.id,
@@ -228,22 +294,21 @@ export default function TryOnClient() {
           top_id: outfitSelection.top || null,
           pants_id: outfitSelection.pants || null,
           shoes_id: outfitSelection.shoes || null,
-          hat_id: outfitSelection.hat || null,
-          bag_id: outfitSelection.bag || null,
+          hats_id: outfitSelection.hats || null,
+          bags_id: outfitSelection.bags || null,
           items: selectedOutfitItems,
         })
-        .select("id, name, items, created_at")
-        .single();
 
       if (error) {
-        console.error("Supabase error:", error);
+        console.error("Supabase outfit save error:", error);
         throw error;
       }
 
-      setOutfits((current) => [data as SavedOutfit, ...current]);
-      setMessage("已保存到我的穿搭。");
+      await loadOutfits(profile.id);
+      setMessage("");
+      setToast("穿搭保存成功");
     } catch (error) {
-      console.error("Supabase error:", error);
+      console.error("Supabase outfit save error:", error);
       setMessage(getSupabaseErrorMessage(error));
     } finally {
       setIsSavingOutfit(false);
@@ -329,6 +394,12 @@ export default function TryOnClient() {
 
   return (
     <div className="mt-8 space-y-8">
+      {toast ? (
+        <div className="fixed inset-x-5 top-5 z-50 mx-auto max-w-sm rounded-full bg-neutral-950 px-5 py-3 text-center text-sm font-semibold text-white shadow-2xl shadow-neutral-300">
+          {toast}
+        </div>
+      ) : null}
+
       {message ? (
         <p className="rounded-2xl bg-neutral-100 px-4 py-3 text-sm leading-6 text-neutral-700">
           {message}
