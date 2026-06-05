@@ -19,17 +19,45 @@ type DashboardStats = {
   favoriteCount: number;
 };
 
+type UserProgress = {
+  hasProfile: boolean;
+  hasBodyPhoto: boolean;
+};
+
 const initialStats: DashboardStats = {
   clothesCount: 0,
   tryOnCount: 0,
   favoriteCount: 0,
 };
 
+const initialProgress: UserProgress = {
+  hasProfile: false,
+  hasBodyPhoto: false,
+};
+
+const onboardingSteps = [
+  { key: "profile", label: "上传个人资料", href: "/profile" },
+  { key: "bodyPhoto", label: "上传全身照", href: "/body-photos" },
+  { key: "clothes", label: "上传衣服", href: "/clothes" },
+  { key: "tryOn", label: "开始试穿", href: "/try-on" },
+] as const;
+
 export default function HomeClient() {
   const [stats, setStats] = useState<DashboardStats>(initialStats);
+  const [progress, setProgress] = useState<UserProgress>(initialProgress);
   const [recentJobs, setRecentJobs] = useState<RecentTryOnJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState("");
+
+  const completedSteps = [
+    progress.hasProfile,
+    progress.hasBodyPhoto,
+    stats.clothesCount > 0,
+    stats.tryOnCount > 0,
+  ];
+  const completedStepCount = completedSteps.filter(Boolean).length;
+  const progressPercent = completedStepCount * 25;
+  const remainingSteps = onboardingSteps.length - completedStepCount;
 
   useEffect(() => {
     async function loadDashboard() {
@@ -41,11 +69,18 @@ export default function HomeClient() {
 
       try {
         const [
+          userResult,
           clothesResult,
           tryOnResult,
           favoriteResult,
           recentResult,
         ] = await Promise.all([
+          supabase
+            .from("users")
+            .select("id, front_photo_url")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
           supabase.from("clothes").select("*", { count: "exact", head: true }),
           supabase
             .from("try_on_jobs")
@@ -62,6 +97,11 @@ export default function HomeClient() {
             .order("created_at", { ascending: false })
             .limit(3),
         ]);
+
+        if (userResult.error) {
+          console.error("Supabase user progress error:", userResult.error);
+          throw userResult.error;
+        }
 
         if (clothesResult.error) {
           console.error("Supabase clothes count error:", clothesResult.error);
@@ -87,6 +127,10 @@ export default function HomeClient() {
           clothesCount: clothesResult.count ?? 0,
           tryOnCount: tryOnResult.count ?? 0,
           favoriteCount: favoriteResult.count ?? 0,
+        });
+        setProgress({
+          hasProfile: Boolean(userResult.data?.id),
+          hasBodyPhoto: Boolean(userResult.data?.front_photo_url),
         });
         setRecentJobs((recentResult.data ?? []) as RecentTryOnJob[]);
         setMessage("");
@@ -135,6 +179,60 @@ export default function HomeClient() {
             {message}
           </p>
         ) : null}
+
+        <section className="space-y-4 rounded-3xl border border-neutral-200 bg-white p-4 shadow-lg shadow-neutral-200/60">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-neutral-950">
+                {progressPercent === 100
+                  ? "恭喜完成第一次AI试穿"
+                  : "首次试穿引导"}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-neutral-500">
+                {progressPercent === 100
+                  ? "🎉 恭喜完成第一次AI试穿"
+                  : `距离完成首次试穿还差 ${remainingSteps} 步`}
+              </p>
+            </div>
+            <span className="rounded-full bg-neutral-950 px-3 py-1 text-xs font-medium text-white">
+              {progressPercent}%
+            </span>
+          </div>
+
+          <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
+            <div
+              className="h-full rounded-full bg-neutral-950 transition-all"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            {onboardingSteps.map((step, index) => {
+              const isComplete = completedSteps[index];
+
+              return (
+                <Link
+                  key={step.key}
+                  href={step.href}
+                  className="flex items-center justify-between rounded-2xl bg-neutral-100 px-4 py-3 text-sm transition active:scale-[0.99]"
+                >
+                  <span
+                    className={
+                      isComplete
+                        ? "font-semibold text-neutral-950"
+                        : "font-medium text-neutral-600"
+                    }
+                  >
+                    步骤{index + 1}：{step.label}
+                  </span>
+                  <span className="text-xs text-neutral-500">
+                    {isComplete ? "已完成" : "去完成"}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
