@@ -36,10 +36,15 @@ const initialProgress: UserProgress = {
 };
 
 const onboardingSteps = [
-  { key: "profile", label: "上传个人资料", href: "/profile" },
-  { key: "bodyPhoto", label: "上传全身照", href: "/body-photos" },
-  { key: "clothes", label: "上传衣服", href: "/clothes" },
-  { key: "tryOn", label: "开始试穿", href: "/try-on" },
+  { key: "profile", label: "上传个人资料", milestone: "资料完成 25%", href: "/profile" },
+  {
+    key: "bodyPhoto",
+    label: "上传全身照",
+    milestone: "全身照完成 50%",
+    href: "/body-photos",
+  },
+  { key: "clothes", label: "上传衣服", milestone: "衣服上传完成 75%", href: "/clothes" },
+  { key: "tryOn", label: "开始试穿", milestone: "完成首次试穿 100%", href: "/try-on" },
 ] as const;
 
 export default function HomeClient() {
@@ -186,7 +191,7 @@ export default function HomeClient() {
               <p className="text-sm font-semibold text-neutral-950">
                 {progressPercent === 100
                   ? "恭喜完成第一次AI试穿"
-                  : "首次试穿引导"}
+                  : "欢迎引导"}
               </p>
               <p className="mt-1 text-xs leading-5 text-neutral-500">
                 {progressPercent === 100
@@ -225,8 +230,8 @@ export default function HomeClient() {
                   >
                     步骤{index + 1}：{step.label}
                   </span>
-                  <span className="text-xs text-neutral-500">
-                    {isComplete ? "已完成" : "去完成"}
+                  <span className="text-right text-xs leading-5 text-neutral-500">
+                    {isComplete ? step.milestone : "去完成"}
                   </span>
                 </Link>
               );
