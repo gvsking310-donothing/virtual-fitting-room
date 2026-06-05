@@ -1,24 +1,33 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 
 type TryOnJob = {
   id: string;
+  user_id: string | null;
+  clothing_id: string | null;
   user_photo_url: string;
   clothing_image_url: string;
   status: "pending" | "processing" | "done" | "failed";
   result_image_url: string | null;
   error_message: string | null;
+  is_favorite: boolean;
   created_at: string;
 };
 
+const jobSelect =
+  "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, is_favorite, created_at";
+
 export default function TryOnResultClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [job, setJob] = useState<TryOnJob | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -42,20 +51,19 @@ export default function TryOnResultClient() {
       try {
         const { data, error } = await supabaseClient
           .from("try_on_jobs")
-          .select(
-            "id, user_photo_url, clothing_image_url, status, result_image_url, error_message, created_at",
-          )
+          .select(jobSelect)
           .eq("id", jobId)
           .single();
 
         if (error) {
-          console.error("Supabase error:", error);
+          console.error("Supabase try-on job load error:", error);
           throw error;
         }
 
         setJob(data);
+        setMessage("");
       } catch (error) {
-        console.error("Supabase error:", error);
+        console.error("Supabase try-on job load error:", error);
         setMessage(getSupabaseErrorMessage(error));
       } finally {
         setIsLoading(false);
@@ -67,6 +75,84 @@ export default function TryOnResultClient() {
 
     return () => window.clearInterval(intervalId);
   }, [searchParams]);
+
+  async function toggleFavorite() {
+    if (!job || !supabase) {
+      return;
+    }
+
+    try {
+      const nextFavorite = !job.is_favorite;
+      const { error } = await supabase
+        .from("try_on_jobs")
+        .update({ is_favorite: nextFavorite })
+        .eq("id", job.id);
+
+      if (error) {
+        console.error("Supabase favorite update error:", error);
+        throw error;
+      }
+
+      setJob({ ...job, is_favorite: nextFavorite });
+      setMessage(nextFavorite ? "已收藏。" : "已取消收藏。");
+    } catch (error) {
+      console.error("Supabase favorite update error:", error);
+      setMessage(getSupabaseErrorMessage(error));
+    }
+  }
+
+  async function retryTryOn() {
+    if (!job || !supabase) {
+      return;
+    }
+
+    setIsRetrying(true);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase
+        .from("try_on_jobs")
+        .insert({
+          user_id: job.user_id,
+          clothing_id: job.clothing_id,
+          user_photo_url: job.user_photo_url,
+          clothing_image_url: job.clothing_image_url,
+          status: "processing",
+          is_favorite: false,
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error("Supabase retry insert error:", error);
+        throw error;
+      }
+
+      const response = await fetch("/api/try-on", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          job_id: data.id,
+          user_photo_url: job.user_photo_url,
+          clothing_image_url: job.clothing_image_url,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        throw new Error(result.error || "重新试穿失败。");
+      }
+
+      router.push(`/try-on/result?id=${data.id}`);
+    } catch (error) {
+      console.error("Try-on retry error:", error);
+      setMessage(getSupabaseErrorMessage(error));
+    } finally {
+      setIsRetrying(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -86,31 +172,34 @@ export default function TryOnResultClient() {
 
   return (
     <div className="mt-8 space-y-5">
-      <article className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
-        <div className="relative min-h-96 bg-neutral-100">
-          <img
-            src={job.user_photo_url}
-            alt="已选择的人物照片"
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        </div>
-        <div className="p-4">
-          <h2 className="text-sm font-semibold text-neutral-950">已选择的人物照片</h2>
-        </div>
-      </article>
+      {message ? (
+        <p className="rounded-2xl bg-neutral-100 px-4 py-3 text-sm leading-6 text-neutral-700">
+          {message}
+        </p>
+      ) : null}
 
-      <article className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
-        <div className="relative aspect-[3/4] bg-neutral-100">
-          <img
-            src={job.clothing_image_url}
-            alt="已选择的衣服图片"
-            className="h-full w-full object-cover"
-          />
+      <section className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
+        <div className="grid grid-cols-3 gap-px bg-neutral-200">
+          <CompareImage src={job.user_photo_url} alt="人物照片" label="人物" />
+          <CompareImage src={job.clothing_image_url} alt="衣服图片" label="衣服" />
+          {job.status === "done" && job.result_image_url ? (
+            <CompareImage src={job.result_image_url} alt="试穿结果" label="结果" />
+          ) : (
+            <div className="relative aspect-[3/4] bg-neutral-100">
+              <div className="flex h-full items-center justify-center px-2 text-center text-xs leading-5 text-neutral-500">
+                {job.status === "failed"
+                  ? "生成失败"
+                  : job.status === "done"
+                    ? "暂无结果图"
+                    : "生成中"}
+              </div>
+              <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-neutral-950">
+                结果
+              </span>
+            </div>
+          )}
         </div>
-        <div className="p-4">
-          <h2 className="text-sm font-semibold text-neutral-950">已选择的衣服图片</h2>
-        </div>
-      </article>
+      </section>
 
       {job.status === "processing" || job.status === "pending" ? (
         <article className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 px-5 py-8 text-center">
@@ -120,20 +209,7 @@ export default function TryOnResultClient() {
             正在生成试穿结果，完成后会自动显示图片。
           </p>
         </article>
-      ) : job.status === "done" && job.result_image_url ? (
-        <article className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
-          <div className="relative aspect-[2/3] bg-neutral-100">
-            <img
-              src={job.result_image_url}
-              alt="AI试穿结果"
-              className="h-full w-full object-cover"
-            />
-          </div>
-          <div className="p-4">
-            <h2 className="text-sm font-semibold text-neutral-950">试穿结果</h2>
-          </div>
-        </article>
-      ) : job.status === "done" ? (
+      ) : job.status === "done" && !job.result_image_url ? (
         <article className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-8 text-center">
           <p className="text-sm font-semibold text-neutral-950">暂无结果图</p>
           <p className="mt-2 text-xs leading-5 text-neutral-500">
@@ -147,11 +223,67 @@ export default function TryOnResultClient() {
             {job.error_message || "Replicate 调用失败，请稍后重试。"}
           </p>
         </article>
-      ) : (
-        <article className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-8 text-center">
-          <p className="text-sm font-semibold text-neutral-950">暂无试穿状态</p>
-        </article>
-      )}
+      ) : null}
+
+      <section className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={toggleFavorite}
+          className="h-12 rounded-full border border-neutral-200 text-sm font-semibold text-neutral-950 transition active:scale-[0.98]"
+        >
+          {job.is_favorite ? "取消收藏" : "收藏"}
+        </button>
+        <button
+          type="button"
+          onClick={retryTryOn}
+          disabled={isRetrying}
+          className="h-12 rounded-full bg-neutral-950 text-sm font-semibold text-white transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-neutral-400"
+        >
+          {isRetrying ? "创建中..." : "再试一次"}
+        </button>
+        <Link
+          href="/try-on/history"
+          className="flex h-12 items-center justify-center rounded-full border border-neutral-200 text-sm font-semibold text-neutral-950 transition active:scale-[0.98]"
+        >
+          查看历史记录
+        </Link>
+        {job.result_image_url ? (
+          <a
+            href={job.result_image_url}
+            download
+            className="flex h-12 items-center justify-center rounded-full border border-neutral-200 text-sm font-semibold text-neutral-950 transition active:scale-[0.98]"
+          >
+            下载结果图
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="h-12 rounded-full border border-neutral-200 text-sm font-semibold text-neutral-400"
+          >
+            下载结果图
+          </button>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CompareImage({
+  src,
+  alt,
+  label,
+}: {
+  src: string;
+  alt: string;
+  label: string;
+}) {
+  return (
+    <div className="relative aspect-[3/4] bg-neutral-100">
+      <img src={src} alt={alt} className="h-full w-full object-cover" />
+      <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-neutral-950">
+        {label}
+      </span>
     </div>
   );
 }
