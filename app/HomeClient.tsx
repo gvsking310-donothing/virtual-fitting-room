@@ -282,9 +282,15 @@ export default function HomeClient() {
             </Link>
             <Link
               href="/try-on/history"
-              className="col-span-2 rounded-2xl bg-neutral-100 px-3 py-4 text-neutral-950 transition active:scale-[0.98]"
+              className="rounded-2xl bg-neutral-100 px-3 py-4 text-neutral-950 transition active:scale-[0.98]"
             >
               我的试穿记录
+            </Link>
+            <Link
+              href="/checklist"
+              className="rounded-2xl bg-neutral-100 px-3 py-4 text-neutral-950 transition active:scale-[0.98]"
+            >
+              MVP完成度检查
             </Link>
           </div>
         </section>
