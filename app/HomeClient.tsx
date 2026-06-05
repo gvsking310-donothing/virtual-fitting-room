@@ -294,9 +294,15 @@ export default function HomeClient() {
             </Link>
             <Link
               href="/roadmap"
-              className="col-span-2 rounded-2xl bg-neutral-100 px-3 py-4 text-neutral-950 transition active:scale-[0.98]"
+              className="rounded-2xl bg-neutral-100 px-3 py-4 text-neutral-950 transition active:scale-[0.98]"
             >
               项目路线图
+            </Link>
+            <Link
+              href="/admin/ai-provider"
+              className="rounded-2xl bg-neutral-100 px-3 py-4 text-neutral-950 transition active:scale-[0.98]"
+            >
+              AI引擎管理
             </Link>
           </div>
         </section>

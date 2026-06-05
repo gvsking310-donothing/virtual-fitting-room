@@ -1,6 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { generateTryOn } from "@/lib/tryon-provider";
+import {
+  AI_PROVIDER_COOKIE,
+  generateTryOn,
+  getDefaultProvider,
+  normalizeProvider,
+} from "@/lib/tryon-provider";
 
 type TryOnRequest = {
   user_photo_url?: string;
@@ -32,6 +38,10 @@ function getSupabaseServerClient() {
 
 export async function POST(request: Request) {
   const replicateDebug = getReplicateDebugInfo();
+  const cookieStore = await cookies();
+  const selectedProvider = normalizeProvider(
+    cookieStore.get(AI_PROVIDER_COOKIE)?.value ?? getDefaultProvider(),
+  );
   const body = (await request.json()) as TryOnRequest;
   const {
     clothing_category: clothingCategory,
@@ -67,6 +77,7 @@ export async function POST(request: Request) {
       userPhotoUrl,
       clothingImageUrl,
       clothingCategory ?? "上衣",
+      selectedProvider,
     );
 
     const { error } = await supabase
@@ -85,6 +96,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ...result,
+      selected_provider: selectedProvider,
       debug: replicateDebug,
     });
   } catch (error) {
@@ -103,6 +115,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: errorMessage,
+        selected_provider: selectedProvider,
         debug: replicateDebug,
       },
       { status: 500 },
