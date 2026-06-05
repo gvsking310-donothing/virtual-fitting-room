@@ -30,13 +30,22 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 text-center text-xs text-neutral-600">
+        <div className="grid grid-cols-2 gap-3 text-center text-xs text-neutral-600">
           <div className="rounded-2xl bg-neutral-100 px-2 py-3">身形资料</div>
           <Link href="/try-on" className="rounded-2xl bg-neutral-100 px-2 py-3">
             AI试穿
           </Link>
           <Link href="/clothes" className="rounded-2xl bg-neutral-100 px-2 py-3">
             上传服装
+          </Link>
+          <Link
+            href="/try-on/history"
+            className="rounded-2xl bg-neutral-100 px-2 py-3"
+          >
+            我的试穿记录
+          </Link>
+          <Link href="/favorites" className="rounded-2xl bg-neutral-100 px-2 py-3">
+            我的收藏
           </Link>
         </div>
       </section>

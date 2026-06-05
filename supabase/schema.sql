@@ -34,6 +34,7 @@ create table if not exists public.try_on_jobs (
   ),
   result_image_url text,
   error_message text,
+  is_favorite boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -55,7 +56,8 @@ add column if not exists front_photo_url text,
 add column if not exists side_photo_url text;
 
 alter table public.try_on_jobs
-add column if not exists error_message text;
+add column if not exists error_message text,
+add column if not exists is_favorite boolean not null default false;
 
 alter table public.outfit
 add column if not exists top_id uuid references public.clothes(id),
