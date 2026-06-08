@@ -268,6 +268,7 @@ export default function TryOnResultClient() {
         </div>
       </section>
 
+      <ProviderErrorDetails job={job} />
       <GenerationProgressCard job={job} />
       <ProviderDebugCard job={job} />
 
@@ -356,6 +357,78 @@ export default function TryOnResultClient() {
         </button>
       ) : null}
     </div>
+  );
+}
+
+function ProviderErrorDetails({ job }: { job: TryOnJob }) {
+  const fallbackReason = job.provider_fallback_reason || "";
+  const errorMessage = job.error_message || "";
+  const hasErrorDetails = Boolean(fallbackReason || errorMessage);
+  const isHuggingFaceFallback =
+    job.provider === "huggingface" && job.actual_provider === "mock";
+
+  if (!hasErrorDetails) {
+    return null;
+  }
+
+  return (
+    <section
+      className={
+        isHuggingFaceFallback
+          ? "rounded-3xl border border-red-200 bg-red-50 p-5 text-red-950 shadow-lg shadow-red-100/70"
+          : "rounded-3xl border border-neutral-200 bg-white p-5 shadow-lg shadow-neutral-200/60"
+      }
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium opacity-70">Provider Error</p>
+          <h2 className="mt-1 text-lg font-semibold">
+            {isHuggingFaceFallback
+              ? "HuggingFace失败，已降级Mock"
+              : "Provider错误详情"}
+          </h2>
+        </div>
+        <span
+          className={
+            isHuggingFaceFallback
+              ? "rounded-full bg-red-600 px-3 py-1 text-xs font-medium text-white"
+              : "rounded-full bg-neutral-950 px-3 py-1 text-xs font-medium text-white"
+          }
+        >
+          始终显示
+        </span>
+      </div>
+
+      {fallbackReason ? (
+        <div className="mt-4">
+          <p className="text-sm font-semibold">provider_fallback_reason</p>
+          <pre
+            className={
+              isHuggingFaceFallback
+                ? "mt-2 max-h-none overflow-visible rounded-2xl bg-white p-3 whitespace-pre-wrap text-left text-xs leading-5 text-red-950"
+                : "mt-2 max-h-none overflow-visible rounded-2xl bg-neutral-100 p-3 whitespace-pre-wrap text-left text-xs leading-5 text-neutral-950"
+            }
+          >
+            {fallbackReason}
+          </pre>
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="mt-4">
+          <p className="text-sm font-semibold">error_message</p>
+          <pre
+            className={
+              isHuggingFaceFallback
+                ? "mt-2 max-h-none overflow-visible rounded-2xl bg-white p-3 whitespace-pre-wrap text-left text-xs leading-5 text-red-950"
+                : "mt-2 max-h-none overflow-visible rounded-2xl bg-neutral-100 p-3 whitespace-pre-wrap text-left text-xs leading-5 text-neutral-950"
+            }
+          >
+            {errorMessage}
+          </pre>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
