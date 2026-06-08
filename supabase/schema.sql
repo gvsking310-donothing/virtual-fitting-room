@@ -87,6 +87,21 @@ add column if not exists hat_id uuid references public.clothes(id),
 add column if not exists bag_id uuid references public.clothes(id),
 add column if not exists items jsonb not null default '[]'::jsonb;
 
+create index if not exists try_on_jobs_created_at_idx
+on public.try_on_jobs (created_at desc);
+
+create index if not exists try_on_jobs_status_idx
+on public.try_on_jobs (status);
+
+create index if not exists try_on_jobs_is_favorite_idx
+on public.try_on_jobs (is_favorite);
+
+create index if not exists try_on_jobs_provider_idx
+on public.try_on_jobs (provider);
+
+create index if not exists try_on_jobs_generation_phase_idx
+on public.try_on_jobs (generation_phase);
+
 alter table public.users enable row level security;
 alter table public.clothes enable row level security;
 alter table public.try_on_jobs enable row level security;

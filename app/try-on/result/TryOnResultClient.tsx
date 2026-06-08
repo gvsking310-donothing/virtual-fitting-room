@@ -289,7 +289,7 @@ export default function TryOnResultClient() {
       ) : job.status === "failed" ? (
         <article className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-8 text-center">
           <p className="text-sm font-semibold text-neutral-950">AI试穿生成失败</p>
-          <p className="mt-3 text-xs leading-5 text-neutral-500">
+          <p className="mt-3 whitespace-pre-wrap text-left text-xs leading-5 text-neutral-500">
             {job.error_message || "AI Provider 调用失败，请稍后重试。"}
           </p>
         </article>
@@ -474,10 +474,12 @@ function ProviderDebugCard({ job }: { job: TryOnJob }) {
           </span>
         </p>
         {fallbackReason ? (
-          <p>
-            错误：
-            <span className="font-medium text-neutral-950">{fallbackReason}</span>
-          </p>
+          <div>
+            <p>错误：</p>
+            <pre className="mt-2 max-h-80 overflow-auto rounded-2xl bg-neutral-100 p-3 whitespace-pre-wrap text-left text-xs leading-5 font-medium text-neutral-950">
+              {fallbackReason}
+            </pre>
+          </div>
         ) : null}
         {hasFallback ? (
           <p className="font-medium text-neutral-950">
@@ -485,7 +487,7 @@ function ProviderDebugCard({ job }: { job: TryOnJob }) {
           </p>
         ) : null}
         {job.error_message ? (
-          <p className="rounded-2xl bg-neutral-100 px-4 py-3 text-xs leading-5 text-neutral-600">
+          <p className="rounded-2xl bg-neutral-100 px-4 py-3 whitespace-pre-wrap text-left text-xs leading-5 text-neutral-600">
             error_message：{job.error_message}
           </p>
         ) : null}

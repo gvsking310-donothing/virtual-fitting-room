@@ -45,13 +45,25 @@ type ReplicateOutput =
 
 class HuggingFaceTryOnError extends Error {
   wasQueued: boolean;
+  debugDetails: string;
 
-  constructor(message: string, wasQueued = false) {
-    super(message);
+  constructor(message: string, wasQueued = false, debugDetails = "") {
+    super(debugDetails ? `${message}\n\n${debugDetails}` : message);
     this.name = "HuggingFaceTryOnError";
     this.wasQueued = wasQueued;
+    this.debugDetails = debugDetails;
   }
 }
+
+type HuggingFaceDebugContext = {
+  apiName: string;
+  rawEvents: string[];
+  responseBodies: string[];
+  responseStatus?: number;
+  responseBody?: string;
+  spaceMessages: string[];
+  spaceStatus?: string;
+};
 
 export async function generateMockTryOn(): Promise<TryOnResult> {
   return {
@@ -74,18 +86,24 @@ export async function generateHuggingFaceTryOn(
   const timeoutMs = getHuggingFaceTimeoutMs();
   let wasQueued = false;
   let queueMessage = "";
+  const debugContext: HuggingFaceDebugContext = {
+    apiName,
+    rawEvents: [],
+    responseBodies: [],
+    spaceMessages: [],
+  };
 
   const app = await Client.connect(spaceId, {
     ...(token ? { token: token as `hf_${string}` } : {}),
     events: ["data", "status"],
     status_callback: (spaceStatus) => {
-      if (
-        spaceStatus.status === "sleeping" ||
-        spaceStatus.status === "building" ||
-        spaceStatus.status === "starting"
-      ) {
+      debugContext.spaceStatus = spaceStatus.status;
+      debugContext.spaceMessages.push(safeStringify(spaceStatus));
+
+      if (isQueuedSpaceStatus(spaceStatus.status)) {
         wasQueued = true;
-        queueMessage = spaceStatus.message || spaceStatus.status;
+        queueMessage =
+          getChineseSpaceStatusMessage(spaceStatus.status, spaceStatus.message);
         void onProgress?.({
           phase: "queued",
           progress: 10,
@@ -94,7 +112,15 @@ export async function generateHuggingFaceTryOn(
         });
       }
     },
+  }).catch((error) => {
+    throw new HuggingFaceTryOnError(
+      getChineseErrorHint(error, false),
+      false,
+      buildHuggingFaceDebugDetails(error, debugContext),
+    );
   });
+  attachHuggingFaceFetchDebugger(app, debugContext);
+
   await onProgress?.({
     phase: "generating",
     progress: wasQueued ? 25 : 20,
@@ -116,13 +142,18 @@ export async function generateHuggingFaceTryOn(
   });
 
   while (true) {
-    const nextEvent = await nextWithTimeout(submission, timeoutMs);
+    const nextEvent = await nextWithTimeout(
+      submission,
+      timeoutMs,
+      debugContext,
+    );
 
     if (nextEvent.done) {
       break;
     }
 
     const event = nextEvent.value;
+    debugContext.rawEvents.push(safeStringify(event));
 
     if (event.type === "status") {
       if (event.queue) {
@@ -137,10 +168,13 @@ export async function generateHuggingFaceTryOn(
       }
 
       if (event.stage === "error") {
-        throw new HuggingFaceTryOnError(
+        const statusMessage =
           stringifyStatusMessage(event.message) ||
-            "HuggingFace Space returned an error.",
+          "HuggingFace Space returned an error.";
+        throw new HuggingFaceTryOnError(
+          getChineseErrorHint(statusMessage, wasQueued),
           wasQueued,
+          buildHuggingFaceDebugDetails(event, debugContext),
         );
       }
 
@@ -172,6 +206,12 @@ export async function generateHuggingFaceTryOn(
       ? `HuggingFace Space did not return a result image. ${queueMessage}`
       : "HuggingFace Space did not return a result image.",
     wasQueued,
+    buildHuggingFaceDebugDetails(
+      {
+        message: "No result image returned from HuggingFace Space.",
+      },
+      debugContext,
+    ),
   );
 }
 
@@ -310,8 +350,16 @@ export async function generateTryOn(
               : "HuggingFace retry failed.";
 
           throw new HuggingFaceTryOnError(
-            `HuggingFace 重试后仍失败：${retryMessage}`,
+            getChineseErrorHint(`HuggingFace 重试后仍失败：${retryMessage}`, wasQueued),
             wasQueued,
+            retryError instanceof HuggingFaceTryOnError
+              ? retryError.debugDetails
+              : buildHuggingFaceDebugDetails(retryError, {
+                  apiName: DEFAULT_HUGGINGFACE_API_NAME,
+                  rawEvents: [],
+                  responseBodies: [],
+                  spaceMessages: [],
+                }),
           );
         }
       }
@@ -401,6 +449,7 @@ export function getProviderStatuses(): TryOnProviderStatus[] {
 async function nextWithTimeout<T>(
   submission: AsyncIterator<T> & { cancel?: () => Promise<void> },
   timeoutMs: number,
+  debugContext?: HuggingFaceDebugContext,
 ) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -413,6 +462,10 @@ async function nextWithTimeout<T>(
         new HuggingFaceTryOnError(
           "HuggingFace Space 排队或生成超时，已自动降级到 Mock。",
           true,
+          buildHuggingFaceDebugDetails(
+            { message: "HuggingFace timeout" },
+            debugContext,
+          ),
         ),
       );
     }, timeoutMs);
@@ -427,6 +480,184 @@ async function nextWithTimeout<T>(
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
+  }
+}
+
+function attachHuggingFaceFetchDebugger(
+  app: Client,
+  debugContext: HuggingFaceDebugContext,
+) {
+  const originalFetch = app.fetch.bind(app);
+
+  app.fetch = async (input, init) => {
+    const response = await originalFetch(input, init);
+    const clonedResponse = response.clone();
+    const body = await clonedResponse.text().catch(() => "");
+
+    debugContext.responseStatus = response.status;
+    debugContext.responseBody = body;
+
+    if (!response.ok || body.includes("error")) {
+      debugContext.responseBodies.push(
+        safeStringify({
+          url: input instanceof URL ? input.toString() : String(input),
+          status: response.status,
+          statusText: response.statusText,
+          body,
+        }),
+      );
+    }
+
+    return response;
+  };
+}
+
+function buildHuggingFaceDebugDetails(
+  error: unknown,
+  debugContext?: HuggingFaceDebugContext,
+) {
+  const errorRecord = normalizeErrorRecord(error);
+
+  return [
+    "HuggingFace 调试信息",
+    `error.message: ${errorRecord.message || "未提供"}`,
+    `error.stack: ${errorRecord.stack || "未提供"}`,
+    `response status: ${debugContext?.responseStatus ?? errorRecord.status ?? "未提供"}`,
+    `response body: ${debugContext?.responseBody || errorRecord.body || "未提供"}`,
+    `space status: ${debugContext?.spaceStatus || "未提供"}`,
+    `space messages: ${
+      debugContext?.spaceMessages.length
+        ? debugContext.spaceMessages.join("\n")
+        : "未提供"
+    }`,
+    `raw events: ${
+      debugContext?.rawEvents.length
+        ? debugContext.rawEvents.slice(-8).join("\n")
+        : "未提供"
+    }`,
+    `raw responses: ${
+      debugContext?.responseBodies.length
+        ? debugContext.responseBodies.slice(-4).join("\n")
+        : "未提供"
+    }`,
+    `raw error object: ${safeStringify(error)}`,
+  ].join("\n");
+}
+
+function normalizeErrorRecord(error: unknown) {
+  const errorObject = error as {
+    body?: unknown;
+    cause?: unknown;
+    detail?: unknown;
+    message?: unknown;
+    response?: { body?: unknown; data?: unknown; status?: unknown };
+    stack?: unknown;
+    status?: unknown;
+    statusCode?: unknown;
+  };
+
+  return {
+    body: stringifyMaybe(
+      errorObject?.response?.body ??
+        errorObject?.response?.data ??
+        errorObject?.body ??
+        errorObject?.detail,
+    ),
+    message:
+      typeof errorObject?.message === "string"
+        ? errorObject.message
+        : stringifyMaybe(error),
+    stack: typeof errorObject?.stack === "string" ? errorObject.stack : "",
+    status: errorObject?.response?.status ?? errorObject?.status ?? errorObject?.statusCode,
+  };
+}
+
+function getChineseErrorHint(error: unknown, wasQueued: boolean) {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : safeStringify(error);
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes("sleep")) {
+    return "HuggingFace Space 正在 sleeping，已自动降级到 Mock。";
+  }
+
+  if (
+    lowerMessage.includes("loading") ||
+    lowerMessage.includes("starting") ||
+    lowerMessage.includes("building")
+  ) {
+    return "HuggingFace Space 正在 loading，已自动降级到 Mock。";
+  }
+
+  if (
+    lowerMessage.includes("queue full") ||
+    lowerMessage.includes("queue is full") ||
+    lowerMessage.includes("currently busy")
+  ) {
+    return "HuggingFace Space 队列已满，已自动降级到 Mock。";
+  }
+
+  if (wasQueued || lowerMessage.includes("queue") || lowerMessage.includes("排队")) {
+    return `HuggingFace Space 排队或生成失败，已自动降级到 Mock。原始错误：${message}`;
+  }
+
+  if (message === "An error occurred") {
+    return "HuggingFace Space 返回泛化错误 An error occurred，已自动降级到 Mock。请查看下方完整调试信息。";
+  }
+
+  return `HuggingFace 调用失败，已自动降级到 Mock。原始错误：${message}`;
+}
+
+function isQueuedSpaceStatus(status: string) {
+  return (
+    status === "sleeping" ||
+    status === "building" ||
+    status === "starting" ||
+    status === "paused"
+  );
+}
+
+function getChineseSpaceStatusMessage(status: string, message: string) {
+  if (status === "sleeping") {
+    return `HuggingFace Space 正在 sleeping，等待唤醒。${message}`;
+  }
+
+  if (status === "building" || status === "starting") {
+    return `HuggingFace Space 正在 loading。${message}`;
+  }
+
+  if (status === "paused") {
+    return `HuggingFace Space 已暂停。${message}`;
+  }
+
+  return message || status;
+}
+
+function stringifyMaybe(value: unknown) {
+  if (!value) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return safeStringify(value);
+}
+
+function safeStringify(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
   }
 }
 
