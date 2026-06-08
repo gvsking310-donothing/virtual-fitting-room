@@ -37,6 +37,7 @@ create table if not exists public.try_on_jobs (
   provider text,
   actual_provider text,
   provider_fallback_reason text,
+  provider_was_queued boolean not null default false,
   is_favorite boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -63,6 +64,7 @@ add column if not exists error_message text,
 add column if not exists provider text,
 add column if not exists actual_provider text,
 add column if not exists provider_fallback_reason text,
+add column if not exists provider_was_queued boolean not null default false,
 add column if not exists is_favorite boolean not null default false;
 
 alter table public.outfit

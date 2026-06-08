@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@gradio/client": "^2.2.1",
     "@supabase/supabase-js": "^2.106.1",
     "next": "^16.2.6",
     "react": "19.2.0",

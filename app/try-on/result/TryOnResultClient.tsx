@@ -18,12 +18,13 @@ type TryOnJob = {
   provider: string | null;
   actual_provider: string | null;
   provider_fallback_reason: string | null;
+  provider_was_queued: boolean;
   is_favorite: boolean;
   created_at: string;
 };
 
 const jobSelect =
-  "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, provider, actual_provider, provider_fallback_reason, is_favorite, created_at";
+  "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, provider, actual_provider, provider_fallback_reason, provider_was_queued, is_favorite, created_at";
 const legacyJobSelect =
   "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, is_favorite, created_at";
 
@@ -78,6 +79,7 @@ export default function TryOnResultClient() {
               provider: null,
               actual_provider: null,
               provider_fallback_reason: null,
+              provider_was_queued: false,
             });
             setMessage("");
             return;
@@ -301,10 +303,12 @@ export default function TryOnResultClient() {
 function ProviderDebugCard({ job }: { job: TryOnJob }) {
   const requestedProvider = normalizeProviderLabel(job.provider);
   const actualProvider = normalizeProviderLabel(job.actual_provider);
-  const fallbackReason = job.provider_fallback_reason || job.error_message;
+  const fallbackReason = job.provider_fallback_reason || job.error_message || "";
   const hasFallback =
     Boolean(job.provider_fallback_reason) ||
     Boolean(job.provider && job.actual_provider === "mock" && job.provider !== "mock");
+  const wasQueued =
+    job.provider_was_queued || fallbackReason.includes("排队");
   const providerStatus =
     job.status === "processing" || job.status === "pending"
       ? "处理中"
@@ -336,6 +340,18 @@ function ProviderDebugCard({ job }: { job: TryOnJob }) {
         <p>
           状态：
           <span className="font-medium text-neutral-950">{providerStatus}</span>
+        </p>
+        <p>
+          是否排队：
+          <span className="font-medium text-neutral-950">
+            {wasQueued ? "是" : "否"}
+          </span>
+        </p>
+        <p>
+          是否降级：
+          <span className="font-medium text-neutral-950">
+            {hasFallback ? "是" : "否"}
+          </span>
         </p>
         {fallbackReason ? (
           <p>
@@ -376,7 +392,8 @@ function isProviderColumnError(error: { code?: string; message?: string }) {
     error.code === "PGRST204" &&
     (message.includes("provider") ||
       message.includes("actual_provider") ||
-      message.includes("provider_fallback_reason"))
+      message.includes("provider_fallback_reason") ||
+      message.includes("provider_was_queued"))
   );
 }
 

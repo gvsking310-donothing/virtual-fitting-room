@@ -1,6 +1,10 @@
+import { Client, handle_file } from "@gradio/client";
 import Replicate from "replicate";
 
 const MOCK_RESULT_IMAGE_URL = "/mock-tryon-result.svg";
+const DEFAULT_HUGGINGFACE_SPACE_ID = "yisol/IDM-VTON";
+const DEFAULT_HUGGINGFACE_API_NAME = "/tryon";
+const DEFAULT_HUGGINGFACE_TIMEOUT_MS = 60_000;
 
 export const AI_PROVIDER_COOKIE = "tryon_provider";
 
@@ -14,6 +18,7 @@ export type TryOnResult = {
   result_image_url: string;
   provider: TryOnProvider;
   fallback_reason?: string;
+  was_queued?: boolean;
 };
 
 export type TryOnProviderStatus = {
@@ -30,6 +35,16 @@ type ReplicateOutput =
   | { url?: string | URL | (() => string | URL) }
   | Array<string | URL | { url?: string | URL | (() => string | URL) }>;
 
+class HuggingFaceTryOnError extends Error {
+  wasQueued: boolean;
+
+  constructor(message: string, wasQueued = false) {
+    super(message);
+    this.name = "HuggingFaceTryOnError";
+    this.wasQueued = wasQueued;
+  }
+}
+
 export async function generateMockTryOn(): Promise<TryOnResult> {
   return {
     result_image_url: MOCK_RESULT_IMAGE_URL,
@@ -42,53 +57,86 @@ export async function generateHuggingFaceTryOn(
   clothingPhoto: string,
   category = "上衣",
 ): Promise<TryOnResult> {
-  const endpoint = process.env.HUGGINGFACE_TRYON_ENDPOINT;
+  const spaceId =
+    process.env.HUGGINGFACE_SPACE_ID ?? DEFAULT_HUGGINGFACE_SPACE_ID;
+  const apiName =
+    process.env.HUGGINGFACE_SPACE_API_NAME ?? DEFAULT_HUGGINGFACE_API_NAME;
   const token = process.env.HUGGINGFACE_API_TOKEN;
+  const timeoutMs = getHuggingFaceTimeoutMs();
+  let wasQueued = false;
+  let queueMessage = "";
 
-  if (!endpoint) {
-    throw new Error("HUGGINGFACE_TRYON_ENDPOINT is not configured.");
-  }
-
-  if (!token) {
-    throw new Error("HUGGINGFACE_API_TOKEN is not configured.");
-  }
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+  const app = await Client.connect(spaceId, {
+    ...(token ? { token: token as `hf_${string}` } : {}),
+    events: ["data", "status"],
+    status_callback: (spaceStatus) => {
+      if (
+        spaceStatus.status === "sleeping" ||
+        spaceStatus.status === "building" ||
+        spaceStatus.status === "starting"
+      ) {
+        wasQueued = true;
+        queueMessage = spaceStatus.message || spaceStatus.status;
+      }
     },
-    body: JSON.stringify({
-      human_img: userPhoto,
-      garm_img: clothingPhoto,
-      garment_des: createGarmentDescription(category),
-    }),
+  });
+  const submission = app.submit(apiName, {
+    dict: {
+      background: handle_file(userPhoto),
+      layers: [],
+      composite: null,
+    },
+    garm_img: handle_file(clothingPhoto),
+    garment_des: createGarmentDescription(category),
+    is_checked: true,
+    is_checked_crop: false,
+    denoise_steps: 30,
+    seed: 42,
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HuggingFace request failed: ${errorText}`);
+  while (true) {
+    const nextEvent = await nextWithTimeout(submission, timeoutMs);
+
+    if (nextEvent.done) {
+      break;
+    }
+
+    const event = nextEvent.value;
+
+    if (event.type === "status") {
+      if (event.queue) {
+        wasQueued = true;
+        queueMessage = formatQueueMessage(event.position, event.eta);
+      }
+
+      if (event.stage === "error") {
+        throw new HuggingFaceTryOnError(
+          stringifyStatusMessage(event.message) ||
+            "HuggingFace Space returned an error.",
+          wasQueued,
+        );
+      }
+    }
+
+    if (event.type === "data") {
+      const resultImageUrl = getHuggingFaceOutputUrl(event.data);
+
+      if (resultImageUrl) {
+        return {
+          result_image_url: resultImageUrl,
+          provider: "huggingface",
+          was_queued: wasQueued,
+        };
+      }
+    }
   }
 
-  const data = (await response.json()) as {
-    result_image_url?: string;
-    image_url?: string;
-    output?: string | string[];
-  };
-  const resultImageUrl =
-    data.result_image_url ??
-    data.image_url ??
-    (Array.isArray(data.output) ? data.output[0] : data.output);
-
-  if (!resultImageUrl) {
-    throw new Error("HuggingFace did not return a result image.");
-  }
-
-  return {
-    result_image_url: resultImageUrl,
-    provider: "huggingface",
-  };
+  throw new HuggingFaceTryOnError(
+    queueMessage
+      ? `HuggingFace Space did not return a result image. ${queueMessage}`
+      : "HuggingFace Space did not return a result image.",
+    wasQueued,
+  );
 }
 
 export async function generateReplicateTryOn(
@@ -198,10 +246,13 @@ export async function generateTryOn(
     const fallbackResult = await generateMockTryOn();
     const errorMessage =
       error instanceof Error ? error.message : "AI provider failed.";
+    const wasQueued =
+      error instanceof HuggingFaceTryOnError ? error.wasQueued : false;
 
     return {
       ...fallbackResult,
       fallback_reason: errorMessage,
+      was_queued: wasQueued,
     };
   }
 }
@@ -225,10 +276,6 @@ export function getDefaultProvider() {
 
 export function getProviderStatuses(): TryOnProviderStatus[] {
   const hasReplicateToken = Boolean(process.env.REPLICATE_API_TOKEN);
-  const hasHuggingFaceConfig = Boolean(
-    process.env.HUGGINGFACE_API_TOKEN &&
-      process.env.HUGGINGFACE_TRYON_ENDPOINT,
-  );
   const hasSelfHostedEndpoint = Boolean(process.env.SELF_HOSTED_IDM_VTON_URL);
 
   return [
@@ -242,9 +289,9 @@ export function getProviderStatuses(): TryOnProviderStatus[] {
     {
       id: "huggingface",
       name: "HuggingFace",
-      description: "通过 HuggingFace 推理接口生成试穿图。",
-      available: hasHuggingFaceConfig,
-      status: hasHuggingFaceConfig ? "可用" : "缺少环境变量",
+      description: "通过免费 HuggingFace Space 调用 IDM-VTON Demo。",
+      available: true,
+      status: "免费 Space 可用，可能排队",
     },
     {
       id: "replicate",
@@ -263,6 +310,108 @@ export function getProviderStatuses(): TryOnProviderStatus[] {
         : "缺少 SELF_HOSTED_IDM_VTON_URL",
     },
   ];
+}
+
+async function nextWithTimeout<T>(
+  submission: AsyncIterator<T> & { cancel?: () => Promise<void> },
+  timeoutMs: number,
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      if (submission.cancel) {
+        void submission.cancel().catch(() => undefined);
+      }
+
+      reject(
+        new HuggingFaceTryOnError(
+          "HuggingFace Space 排队或生成超时，已自动降级到 Mock。",
+          true,
+        ),
+      );
+    }, timeoutMs);
+  });
+
+  try {
+    return (await Promise.race([
+      submission.next(),
+      timeoutPromise,
+    ])) as IteratorResult<T>;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function getHuggingFaceOutputUrl(output: unknown): string {
+  if (!output) {
+    return "";
+  }
+
+  if (typeof output === "string") {
+    return output;
+  }
+
+  if (output instanceof URL) {
+    return output.toString();
+  }
+
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      const result = getHuggingFaceOutputUrl(item);
+
+      if (result) {
+        return result;
+      }
+    }
+
+    return "";
+  }
+
+  if (typeof output === "object") {
+    const outputRecord = output as Record<string, unknown>;
+    const possibleValue =
+      outputRecord.url ??
+      outputRecord.path ??
+      outputRecord.name ??
+      outputRecord.result_image_url ??
+      outputRecord.image_url ??
+      outputRecord.output ??
+      outputRecord.data;
+
+    return getHuggingFaceOutputUrl(possibleValue);
+  }
+
+  return "";
+}
+
+function getHuggingFaceTimeoutMs() {
+  const timeout = Number(process.env.HUGGINGFACE_TIMEOUT_MS);
+
+  return Number.isFinite(timeout) && timeout > 0
+    ? timeout
+    : DEFAULT_HUGGINGFACE_TIMEOUT_MS;
+}
+
+function formatQueueMessage(position?: number, eta?: number) {
+  const positionText =
+    typeof position === "number" ? `队列位置 ${position}` : "已进入队列";
+  const etaText = typeof eta === "number" ? `，预计 ${Math.ceil(eta)} 秒` : "";
+
+  return `${positionText}${etaText}`;
+}
+
+function stringifyStatusMessage(message: unknown) {
+  if (!message) {
+    return "";
+  }
+
+  if (typeof message === "string") {
+    return message;
+  }
+
+  return JSON.stringify(message);
 }
 
 function getReplicateOutputUrl(output: ReplicateOutput | undefined) {

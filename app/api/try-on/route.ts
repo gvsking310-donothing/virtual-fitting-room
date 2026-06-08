@@ -39,7 +39,7 @@ function getSupabaseServerClient() {
 async function updateTryOnJob(
   supabase: ReturnType<typeof getSupabaseServerClient>,
   jobId: string,
-  values: Record<string, string | null>,
+  values: Record<string, boolean | string | null>,
 ) {
   const { error } = await supabase
     .from("try_on_jobs")
@@ -55,6 +55,7 @@ async function updateTryOnJob(
       actual_provider: _actualProvider,
       provider: _provider,
       provider_fallback_reason: _providerFallbackReason,
+      provider_was_queued: _providerWasQueued,
       ...legacyValues
     } = values;
     const { error: legacyError } = await supabase
@@ -79,7 +80,8 @@ function isProviderColumnError(error: { code?: string; message?: string }) {
     error.code === "PGRST204" &&
     (message.includes("provider") ||
       message.includes("actual_provider") ||
-      message.includes("provider_fallback_reason"))
+      message.includes("provider_fallback_reason") ||
+      message.includes("provider_was_queued"))
   );
 }
 
@@ -114,6 +116,7 @@ export async function POST(request: Request) {
         provider: selectedProvider,
         actual_provider: null,
         provider_fallback_reason: null,
+        provider_was_queued: false,
       });
     } catch (processingError) {
       console.error("Supabase error:", processingError);
@@ -135,6 +138,7 @@ export async function POST(request: Request) {
         provider: selectedProvider,
         actual_provider: result.provider,
         provider_fallback_reason: result.fallback_reason ?? null,
+        provider_was_queued: result.was_queued ?? false,
       });
     } catch (error) {
       console.error("Supabase error:", error);
@@ -158,6 +162,7 @@ export async function POST(request: Request) {
         provider: selectedProvider,
         actual_provider: null,
         provider_fallback_reason: null,
+        provider_was_queued: false,
       });
     } catch (updateError) {
       console.error("Supabase try-on failure update error:", updateError);
