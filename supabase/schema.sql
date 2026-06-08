@@ -34,6 +34,9 @@ create table if not exists public.try_on_jobs (
   ),
   result_image_url text,
   error_message text,
+  provider text,
+  actual_provider text,
+  provider_fallback_reason text,
   is_favorite boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -57,6 +60,9 @@ add column if not exists side_photo_url text;
 
 alter table public.try_on_jobs
 add column if not exists error_message text,
+add column if not exists provider text,
+add column if not exists actual_provider text,
+add column if not exists provider_fallback_reason text,
 add column if not exists is_favorite boolean not null default false;
 
 alter table public.outfit

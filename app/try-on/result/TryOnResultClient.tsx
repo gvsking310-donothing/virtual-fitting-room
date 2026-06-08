@@ -15,11 +15,16 @@ type TryOnJob = {
   status: "pending" | "processing" | "done" | "failed";
   result_image_url: string | null;
   error_message: string | null;
+  provider: string | null;
+  actual_provider: string | null;
+  provider_fallback_reason: string | null;
   is_favorite: boolean;
   created_at: string;
 };
 
 const jobSelect =
+  "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, provider, actual_provider, provider_fallback_reason, is_favorite, created_at";
+const legacyJobSelect =
   "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, is_favorite, created_at";
 
 export default function TryOnResultClient() {
@@ -56,6 +61,28 @@ export default function TryOnResultClient() {
           .single();
 
         if (error) {
+          if (isProviderColumnError(error)) {
+            const { data: legacyData, error: legacyError } = await supabaseClient
+              .from("try_on_jobs")
+              .select(legacyJobSelect)
+              .eq("id", jobId)
+              .single();
+
+            if (legacyError) {
+              console.error("Supabase try-on job load error:", legacyError);
+              throw legacyError;
+            }
+
+            setJob({
+              ...legacyData,
+              provider: null,
+              actual_provider: null,
+              provider_fallback_reason: null,
+            });
+            setMessage("");
+            return;
+          }
+
           console.error("Supabase try-on job load error:", error);
           throw error;
         }
@@ -201,6 +228,8 @@ export default function TryOnResultClient() {
         </div>
       </section>
 
+      <ProviderDebugCard job={job} />
+
       {job.status === "processing" || job.status === "pending" ? (
         <article className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 px-5 py-8 text-center">
           <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-950" />
@@ -220,7 +249,7 @@ export default function TryOnResultClient() {
         <article className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-8 text-center">
           <p className="text-sm font-semibold text-neutral-950">AI试穿生成失败</p>
           <p className="mt-3 text-xs leading-5 text-neutral-500">
-            {job.error_message || "Replicate 调用失败，请稍后重试。"}
+            {job.error_message || "AI Provider 调用失败，请稍后重试。"}
           </p>
         </article>
       ) : null}
@@ -266,6 +295,88 @@ export default function TryOnResultClient() {
         )}
       </section>
     </div>
+  );
+}
+
+function ProviderDebugCard({ job }: { job: TryOnJob }) {
+  const requestedProvider = normalizeProviderLabel(job.provider);
+  const actualProvider = normalizeProviderLabel(job.actual_provider);
+  const fallbackReason = job.provider_fallback_reason || job.error_message;
+  const hasFallback =
+    Boolean(job.provider_fallback_reason) ||
+    Boolean(job.provider && job.actual_provider === "mock" && job.provider !== "mock");
+  const providerStatus =
+    job.status === "processing" || job.status === "pending"
+      ? "处理中"
+      : job.status === "failed" || hasFallback
+        ? "失败"
+        : "成功";
+
+  return (
+    <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-lg shadow-neutral-200/60">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium text-neutral-500">当前 Provider</p>
+          <h2 className="mt-1 text-xl font-semibold text-neutral-950">
+            {requestedProvider}
+          </h2>
+        </div>
+        <span
+          className={
+            providerStatus === "成功"
+              ? "rounded-full bg-neutral-950 px-3 py-1 text-xs font-medium text-white"
+              : "rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-600"
+          }
+        >
+          {providerStatus}
+        </span>
+      </div>
+
+      <div className="mt-4 space-y-2 text-sm leading-6 text-neutral-700">
+        <p>
+          状态：
+          <span className="font-medium text-neutral-950">{providerStatus}</span>
+        </p>
+        {fallbackReason ? (
+          <p>
+            错误：
+            <span className="font-medium text-neutral-950">{fallbackReason}</span>
+          </p>
+        ) : null}
+        {hasFallback ? (
+          <p className="font-medium text-neutral-950">
+            已自动切换到 {actualProvider}
+          </p>
+        ) : null}
+        {job.error_message ? (
+          <p className="rounded-2xl bg-neutral-100 px-4 py-3 text-xs leading-5 text-neutral-600">
+            error_message：{job.error_message}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function normalizeProviderLabel(provider?: string | null) {
+  const providerLabels: Record<string, string> = {
+    mock: "Mock",
+    replicate: "Replicate",
+    huggingface: "HuggingFace",
+    "self-hosted": "Self Hosted",
+  };
+
+  return providerLabels[provider ?? ""] ?? "Mock";
+}
+
+function isProviderColumnError(error: { code?: string; message?: string }) {
+  const message = error.message ?? "";
+
+  return (
+    error.code === "PGRST204" &&
+    (message.includes("provider") ||
+      message.includes("actual_provider") ||
+      message.includes("provider_fallback_reason"))
   );
 }
 

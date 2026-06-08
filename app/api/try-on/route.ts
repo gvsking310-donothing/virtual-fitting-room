@@ -36,6 +36,53 @@ function getSupabaseServerClient() {
   return createClient(supabaseUrl, supabaseAnonKey);
 }
 
+async function updateTryOnJob(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  jobId: string,
+  values: Record<string, string | null>,
+) {
+  const { error } = await supabase
+    .from("try_on_jobs")
+    .update(values)
+    .eq("id", jobId);
+
+  if (!error) {
+    return;
+  }
+
+  if (isProviderColumnError(error)) {
+    const {
+      actual_provider: _actualProvider,
+      provider: _provider,
+      provider_fallback_reason: _providerFallbackReason,
+      ...legacyValues
+    } = values;
+    const { error: legacyError } = await supabase
+      .from("try_on_jobs")
+      .update(legacyValues)
+      .eq("id", jobId);
+
+    if (!legacyError) {
+      return;
+    }
+
+    throw legacyError;
+  }
+
+  throw error;
+}
+
+function isProviderColumnError(error: { code?: string; message?: string }) {
+  const message = error.message ?? "";
+
+  return (
+    error.code === "PGRST204" &&
+    (message.includes("provider") ||
+      message.includes("actual_provider") ||
+      message.includes("provider_fallback_reason"))
+  );
+}
+
 export async function POST(request: Request) {
   const replicateDebug = getReplicateDebugInfo();
   const cookieStore = await cookies();
@@ -60,15 +107,15 @@ export async function POST(request: Request) {
   const supabase = getSupabaseServerClient();
 
   try {
-    const { error: processingError } = await supabase
-      .from("try_on_jobs")
-      .update({
+    try {
+      await updateTryOnJob(supabase, jobId, {
         status: "processing",
         error_message: null,
-      })
-      .eq("id", jobId);
-
-    if (processingError) {
+        provider: selectedProvider,
+        actual_provider: null,
+        provider_fallback_reason: null,
+      });
+    } catch (processingError) {
       console.error("Supabase error:", processingError);
       throw processingError;
     }
@@ -80,16 +127,16 @@ export async function POST(request: Request) {
       selectedProvider,
     );
 
-    const { error } = await supabase
-      .from("try_on_jobs")
-      .update({
+    try {
+      await updateTryOnJob(supabase, jobId, {
         status: "done",
         result_image_url: result.result_image_url,
-        error_message: null,
-      })
-      .eq("id", jobId);
-
-    if (error) {
+        error_message: result.fallback_reason ?? null,
+        provider: selectedProvider,
+        actual_provider: result.provider,
+        provider_fallback_reason: result.fallback_reason ?? null,
+      });
+    } catch (error) {
       console.error("Supabase error:", error);
       throw error;
     }
@@ -104,13 +151,17 @@ export async function POST(request: Request) {
     const errorMessage =
       error instanceof Error ? error.message : "Try-on generation failed.";
 
-    await supabase
-      .from("try_on_jobs")
-      .update({
+    try {
+      await updateTryOnJob(supabase, jobId, {
         status: "failed",
         error_message: errorMessage,
-      })
-      .eq("id", jobId);
+        provider: selectedProvider,
+        actual_provider: null,
+        provider_fallback_reason: null,
+      });
+    } catch (updateError) {
+      console.error("Supabase try-on failure update error:", updateError);
+    }
 
     return NextResponse.json(
       {
