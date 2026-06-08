@@ -19,6 +19,14 @@ export type TryOnResult = {
   provider: TryOnProvider;
   fallback_reason?: string;
   was_queued?: boolean;
+  retry_count?: number;
+};
+
+export type TryOnProgress = {
+  phase: "queued" | "generating" | "done";
+  progress: number;
+  message?: string;
+  wasQueued?: boolean;
 };
 
 export type TryOnProviderStatus = {
@@ -56,6 +64,7 @@ export async function generateHuggingFaceTryOn(
   userPhoto: string,
   clothingPhoto: string,
   category = "上衣",
+  onProgress?: (progress: TryOnProgress) => Promise<void> | void,
 ): Promise<TryOnResult> {
   const spaceId =
     process.env.HUGGINGFACE_SPACE_ID ?? DEFAULT_HUGGINGFACE_SPACE_ID;
@@ -77,8 +86,20 @@ export async function generateHuggingFaceTryOn(
       ) {
         wasQueued = true;
         queueMessage = spaceStatus.message || spaceStatus.status;
+        void onProgress?.({
+          phase: "queued",
+          progress: 10,
+          message: queueMessage,
+          wasQueued: true,
+        });
       }
     },
+  });
+  await onProgress?.({
+    phase: "generating",
+    progress: wasQueued ? 25 : 20,
+    message: "正在生成试穿图",
+    wasQueued,
   });
   const submission = app.submit(apiName, {
     dict: {
@@ -107,6 +128,12 @@ export async function generateHuggingFaceTryOn(
       if (event.queue) {
         wasQueued = true;
         queueMessage = formatQueueMessage(event.position, event.eta);
+        await onProgress?.({
+          phase: "queued",
+          progress: 30,
+          message: queueMessage,
+          wasQueued: true,
+        });
       }
 
       if (event.stage === "error") {
@@ -115,6 +142,15 @@ export async function generateHuggingFaceTryOn(
             "HuggingFace Space returned an error.",
           wasQueued,
         );
+      }
+
+      if (event.stage === "generating") {
+        await onProgress?.({
+          phase: "generating",
+          progress: 70,
+          message: "正在生成试穿图",
+          wasQueued,
+        });
       }
     }
 
@@ -226,10 +262,59 @@ export async function generateTryOn(
   clothingPhoto: string,
   category = "上衣",
   provider: TryOnProvider = getDefaultProvider(),
+  onProgress?: (progress: TryOnProgress) => Promise<void> | void,
 ): Promise<TryOnResult> {
   try {
     if (provider === "huggingface") {
-      return await generateHuggingFaceTryOn(userPhoto, clothingPhoto, category);
+      try {
+        return await generateHuggingFaceTryOn(
+          userPhoto,
+          clothingPhoto,
+          category,
+          onProgress,
+        );
+      } catch (firstError) {
+        console.error("HuggingFace try-on failed, retrying once:", firstError);
+        await onProgress?.({
+          phase: "generating",
+          progress: 45,
+          message: "HuggingFace 失败，正在自动重试",
+          wasQueued:
+            firstError instanceof HuggingFaceTryOnError
+              ? firstError.wasQueued
+              : false,
+        });
+
+        try {
+          const retryResult = await generateHuggingFaceTryOn(
+            userPhoto,
+            clothingPhoto,
+            category,
+            onProgress,
+          );
+
+          return {
+            ...retryResult,
+            retry_count: 1,
+          };
+        } catch (retryError) {
+          const wasQueued =
+            retryError instanceof HuggingFaceTryOnError
+              ? retryError.wasQueued
+              : firstError instanceof HuggingFaceTryOnError
+                ? firstError.wasQueued
+                : false;
+          const retryMessage =
+            retryError instanceof Error
+              ? retryError.message
+              : "HuggingFace retry failed.";
+
+          throw new HuggingFaceTryOnError(
+            `HuggingFace 重试后仍失败：${retryMessage}`,
+            wasQueued,
+          );
+        }
+      }
     }
 
     if (provider === "replicate") {
@@ -253,6 +338,7 @@ export async function generateTryOn(
       ...fallbackResult,
       fallback_reason: errorMessage,
       was_queued: wasQueued,
+      retry_count: provider === "huggingface" ? 1 : 0,
     };
   }
 }

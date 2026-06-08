@@ -354,7 +354,7 @@ export default function TryOnClient() {
 
       createdJobId = data.id;
 
-      const response = await fetch("/api/try-on", {
+      void fetch("/api/try-on", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -365,12 +365,9 @@ export default function TryOnClient() {
           clothing_image_url: selectedClothing.image_url,
           clothing_category: selectedClothing.category,
         }),
+      }).catch((error) => {
+        console.error("Try-on API start error:", error);
       });
-
-      if (!response.ok) {
-        const result = (await response.json()) as { error?: string };
-        throw new Error(result.error || "AI试穿任务生成失败。");
-      }
 
       router.push(`/try-on/result?id=${createdJobId}`);
     } catch (error) {

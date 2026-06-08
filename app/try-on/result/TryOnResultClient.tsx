@@ -19,12 +19,18 @@ type TryOnJob = {
   actual_provider: string | null;
   provider_fallback_reason: string | null;
   provider_was_queued: boolean;
+  generation_progress: number;
+  generation_phase: string | null;
+  generation_started_at: string | null;
+  generation_completed_at: string | null;
+  generation_duration_seconds: number | null;
+  provider_retry_count: number;
   is_favorite: boolean;
   created_at: string;
 };
 
 const jobSelect =
-  "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, provider, actual_provider, provider_fallback_reason, provider_was_queued, is_favorite, created_at";
+  "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, provider, actual_provider, provider_fallback_reason, provider_was_queued, generation_progress, generation_phase, generation_started_at, generation_completed_at, generation_duration_seconds, provider_retry_count, is_favorite, created_at";
 const legacyJobSelect =
   "id, user_id, clothing_id, user_photo_url, clothing_image_url, status, result_image_url, error_message, is_favorite, created_at";
 
@@ -34,6 +40,10 @@ export default function TryOnResultClient() {
   const [job, setJob] = useState<TryOnJob | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{
+    src: string;
+    label: string;
+  } | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -80,6 +90,12 @@ export default function TryOnResultClient() {
               actual_provider: null,
               provider_fallback_reason: null,
               provider_was_queued: false,
+              generation_progress: legacyData.status === "done" ? 100 : 0,
+              generation_phase: null,
+              generation_started_at: null,
+              generation_completed_at: null,
+              generation_duration_seconds: null,
+              provider_retry_count: 0,
             });
             setMessage("");
             return;
@@ -100,7 +116,7 @@ export default function TryOnResultClient() {
     }
 
     loadJob();
-    const intervalId = window.setInterval(loadJob, 2000);
+    const intervalId = window.setInterval(loadJob, 3000);
 
     return () => window.clearInterval(intervalId);
   }, [searchParams]);
@@ -209,10 +225,32 @@ export default function TryOnResultClient() {
 
       <section className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-lg shadow-neutral-200/70">
         <div className="grid grid-cols-3 gap-px bg-neutral-200">
-          <CompareImage src={job.user_photo_url} alt="人物照片" label="人物" />
-          <CompareImage src={job.clothing_image_url} alt="衣服图片" label="衣服" />
+          <CompareImage
+            src={job.user_photo_url}
+            alt="人物照片"
+            label="人物"
+            onOpen={() => setPreviewImage({ src: job.user_photo_url, label: "人物照片" })}
+          />
+          <CompareImage
+            src={job.clothing_image_url}
+            alt="衣服图片"
+            label="衣服"
+            onOpen={() =>
+              setPreviewImage({ src: job.clothing_image_url, label: "衣服图片" })
+            }
+          />
           {job.status === "done" && job.result_image_url ? (
-            <CompareImage src={job.result_image_url} alt="试穿结果" label="结果" />
+            <CompareImage
+              src={job.result_image_url}
+              alt="试穿结果"
+              label="结果"
+              onOpen={() =>
+                setPreviewImage({
+                  src: job.result_image_url as string,
+                  label: "试穿结果",
+                })
+              }
+            />
           ) : (
             <div className="relative aspect-[3/4] bg-neutral-100">
               <div className="flex h-full items-center justify-center px-2 text-center text-xs leading-5 text-neutral-500">
@@ -230,6 +268,7 @@ export default function TryOnResultClient() {
         </div>
       </section>
 
+      <GenerationProgressCard job={job} />
       <ProviderDebugCard job={job} />
 
       {job.status === "processing" || job.status === "pending" ? (
@@ -284,7 +323,7 @@ export default function TryOnResultClient() {
             download
             className="flex h-12 items-center justify-center rounded-full border border-neutral-200 text-sm font-semibold text-neutral-950 transition active:scale-[0.98]"
           >
-            下载结果图
+            高清下载
           </a>
         ) : (
           <button
@@ -292,11 +331,86 @@ export default function TryOnResultClient() {
             disabled
             className="h-12 rounded-full border border-neutral-200 text-sm font-semibold text-neutral-400"
           >
-            下载结果图
+            高清下载
           </button>
         )}
       </section>
+
+      {previewImage ? (
+        <button
+          type="button"
+          onClick={() => setPreviewImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-5"
+        >
+          <span className="absolute top-6 text-sm font-medium text-white">
+            {previewImage.label}
+          </span>
+          <img
+            src={previewImage.src}
+            alt={previewImage.label}
+            className="max-h-[82vh] max-w-full rounded-3xl object-contain"
+          />
+          <span className="absolute bottom-6 rounded-full bg-white px-4 py-2 text-xs font-medium text-neutral-950">
+            点击关闭
+          </span>
+        </button>
+      ) : null}
     </div>
+  );
+}
+
+function GenerationProgressCard({ job }: { job: TryOnJob }) {
+  const progress = getGenerationProgress(job);
+  const phase = getGenerationPhase(job);
+  const duration = getGenerationDuration(job);
+
+  return (
+    <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-lg shadow-neutral-200/60">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium text-neutral-500">AI生成进度</p>
+          <h2 className="mt-1 text-lg font-semibold text-neutral-950">
+            正在生成试穿图
+          </h2>
+        </div>
+        <span className="text-2xl font-semibold text-neutral-950">
+          {progress}%
+        </span>
+      </div>
+
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-neutral-100">
+        <div
+          className="h-full rounded-full bg-neutral-950 transition-all duration-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-medium">
+        {["当前排队中", "当前生成中", "已完成"].map((label) => (
+          <span
+            key={label}
+            className={
+              phase === label
+                ? "rounded-full bg-neutral-950 px-2 py-2 text-white"
+                : "rounded-full bg-neutral-100 px-2 py-2 text-neutral-500"
+            }
+          >
+            {label}
+          </span>
+        ))}
+      </div>
+
+      <p className="mt-4 text-sm leading-6 text-neutral-600">
+        状态：
+        <span className="font-medium text-neutral-950">{phase}</span>
+      </p>
+      <p className="mt-1 text-sm leading-6 text-neutral-600">
+        本次生成耗时：
+        <span className="font-medium text-neutral-950">
+          {duration !== null ? `${duration} 秒` : "计算中"}
+        </span>
+      </p>
+    </section>
   );
 }
 
@@ -353,6 +467,12 @@ function ProviderDebugCard({ job }: { job: TryOnJob }) {
             {hasFallback ? "是" : "否"}
           </span>
         </p>
+        <p>
+          自动重试：
+          <span className="font-medium text-neutral-950">
+            {job.provider_retry_count} 次
+          </span>
+        </p>
         {fallbackReason ? (
           <p>
             错误：
@@ -393,7 +513,13 @@ function isProviderColumnError(error: { code?: string; message?: string }) {
     (message.includes("provider") ||
       message.includes("actual_provider") ||
       message.includes("provider_fallback_reason") ||
-      message.includes("provider_was_queued"))
+      message.includes("provider_was_queued") ||
+      message.includes("generation_progress") ||
+      message.includes("generation_phase") ||
+      message.includes("generation_started_at") ||
+      message.includes("generation_completed_at") ||
+      message.includes("generation_duration_seconds") ||
+      message.includes("provider_retry_count"))
   );
 }
 
@@ -401,17 +527,65 @@ function CompareImage({
   src,
   alt,
   label,
+  onOpen,
 }: {
   src: string;
   alt: string;
   label: string;
+  onOpen: () => void;
 }) {
   return (
-    <div className="relative aspect-[3/4] bg-neutral-100">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="relative aspect-[3/4] bg-neutral-100 text-left"
+    >
       <img src={src} alt={alt} className="h-full w-full object-cover" />
       <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-neutral-950">
         {label}
       </span>
-    </div>
+    </button>
   );
+}
+
+function getGenerationProgress(job: TryOnJob) {
+  if (job.status === "done") {
+    return 100;
+  }
+
+  if (job.status === "failed") {
+    return Math.max(job.generation_progress || 0, 100);
+  }
+
+  return Math.min(Math.max(job.generation_progress || 0, 0), 99);
+}
+
+function getGenerationPhase(job: TryOnJob) {
+  if (job.status === "done") {
+    return "已完成";
+  }
+
+  if (job.provider_was_queued || job.generation_phase === "当前排队中") {
+    return "当前排队中";
+  }
+
+  if (job.status === "processing" || job.status === "pending") {
+    return "当前生成中";
+  }
+
+  return job.generation_phase || "当前生成中";
+}
+
+function getGenerationDuration(job: TryOnJob) {
+  if (typeof job.generation_duration_seconds === "number") {
+    return job.generation_duration_seconds;
+  }
+
+  const startTime = job.generation_started_at || job.created_at;
+
+  if (job.status === "processing" || job.status === "pending") {
+    return Math.max(0, Math.round((Date.now() - new Date(startTime).getTime()) / 1000));
+  }
+
+  return null;
 }

@@ -38,6 +38,12 @@ create table if not exists public.try_on_jobs (
   actual_provider text,
   provider_fallback_reason text,
   provider_was_queued boolean not null default false,
+  generation_progress integer not null default 0,
+  generation_phase text,
+  generation_started_at timestamptz,
+  generation_completed_at timestamptz,
+  generation_duration_seconds integer,
+  provider_retry_count integer not null default 0,
   is_favorite boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -65,6 +71,12 @@ add column if not exists provider text,
 add column if not exists actual_provider text,
 add column if not exists provider_fallback_reason text,
 add column if not exists provider_was_queued boolean not null default false,
+add column if not exists generation_progress integer not null default 0,
+add column if not exists generation_phase text,
+add column if not exists generation_started_at timestamptz,
+add column if not exists generation_completed_at timestamptz,
+add column if not exists generation_duration_seconds integer,
+add column if not exists provider_retry_count integer not null default 0,
 add column if not exists is_favorite boolean not null default false;
 
 alter table public.outfit

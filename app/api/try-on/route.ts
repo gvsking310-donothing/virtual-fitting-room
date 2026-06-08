@@ -39,7 +39,7 @@ function getSupabaseServerClient() {
 async function updateTryOnJob(
   supabase: ReturnType<typeof getSupabaseServerClient>,
   jobId: string,
-  values: Record<string, boolean | string | null>,
+  values: Record<string, boolean | number | string | null>,
 ) {
   const { error } = await supabase
     .from("try_on_jobs")
@@ -56,6 +56,12 @@ async function updateTryOnJob(
       provider: _provider,
       provider_fallback_reason: _providerFallbackReason,
       provider_was_queued: _providerWasQueued,
+      generation_progress: _generationProgress,
+      generation_phase: _generationPhase,
+      generation_started_at: _generationStartedAt,
+      generation_completed_at: _generationCompletedAt,
+      generation_duration_seconds: _generationDurationSeconds,
+      provider_retry_count: _providerRetryCount,
       ...legacyValues
     } = values;
     const { error: legacyError } = await supabase
@@ -81,7 +87,13 @@ function isProviderColumnError(error: { code?: string; message?: string }) {
     (message.includes("provider") ||
       message.includes("actual_provider") ||
       message.includes("provider_fallback_reason") ||
-      message.includes("provider_was_queued"))
+      message.includes("provider_was_queued") ||
+      message.includes("generation_progress") ||
+      message.includes("generation_phase") ||
+      message.includes("generation_started_at") ||
+      message.includes("generation_completed_at") ||
+      message.includes("generation_duration_seconds") ||
+      message.includes("provider_retry_count"))
   );
 }
 
@@ -107,6 +119,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = getSupabaseServerClient();
+  const startedAt = new Date();
 
   try {
     try {
@@ -117,6 +130,12 @@ export async function POST(request: Request) {
         actual_provider: null,
         provider_fallback_reason: null,
         provider_was_queued: false,
+        generation_progress: 5,
+        generation_phase: "正在生成试穿图",
+        generation_started_at: startedAt.toISOString(),
+        generation_completed_at: null,
+        generation_duration_seconds: null,
+        provider_retry_count: 0,
       });
     } catch (processingError) {
       console.error("Supabase error:", processingError);
@@ -128,6 +147,23 @@ export async function POST(request: Request) {
       clothingImageUrl,
       clothingCategory ?? "上衣",
       selectedProvider,
+      async (progress) => {
+        await updateTryOnJob(supabase, jobId, {
+          generation_progress: progress.progress,
+          generation_phase:
+            progress.phase === "queued"
+              ? "当前排队中"
+              : progress.phase === "done"
+                ? "已完成"
+                : progress.message ?? "当前生成中",
+          provider_was_queued: progress.wasQueued ?? false,
+        });
+      },
+    );
+    const completedAt = new Date();
+    const durationSeconds = Math.max(
+      0,
+      Math.round((completedAt.getTime() - startedAt.getTime()) / 1000),
     );
 
     try {
@@ -139,6 +175,11 @@ export async function POST(request: Request) {
         actual_provider: result.provider,
         provider_fallback_reason: result.fallback_reason ?? null,
         provider_was_queued: result.was_queued ?? false,
+        generation_progress: 100,
+        generation_phase: "已完成",
+        generation_completed_at: completedAt.toISOString(),
+        generation_duration_seconds: durationSeconds,
+        provider_retry_count: result.retry_count ?? 0,
       });
     } catch (error) {
       console.error("Supabase error:", error);
@@ -163,6 +204,14 @@ export async function POST(request: Request) {
         actual_provider: null,
         provider_fallback_reason: null,
         provider_was_queued: false,
+        generation_progress: 100,
+        generation_phase: "生成失败",
+        generation_completed_at: new Date().toISOString(),
+        generation_duration_seconds: Math.max(
+          0,
+          Math.round((Date.now() - startedAt.getTime()) / 1000),
+        ),
+        provider_retry_count: selectedProvider === "huggingface" ? 1 : 0,
       });
     } catch (updateError) {
       console.error("Supabase try-on failure update error:", updateError);
