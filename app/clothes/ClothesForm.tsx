@@ -1,9 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
+import {
+  deleteTrialClothing,
+  fileToDataUrl,
+  readTrialClothes,
+  saveTrialClothing,
+} from "@/lib/trial-store";
 
 const categories = [
   "上衣",
@@ -90,6 +96,12 @@ export default function ClothesForm() {
 
   const imagePreview = useMemo(() => getPreview(form.image), [form.image]);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setItems(readTrialClothes() as ClothingItem[]);
+    }
+  }, []);
+
   function updateField(name: keyof FormState, value: string | File | null) {
     setForm((current) => ({ ...current, [name]: value }));
   }
@@ -107,14 +119,27 @@ export default function ClothesForm() {
       return;
     }
 
-    if (!isSupabaseConfigured || !supabase) {
-      setMessage("请先在 Vercel 配置 Supabase 环境变量。");
-      return;
-    }
-
     setIsSaving(true);
 
     try {
+      if (!isSupabaseConfigured || !supabase) {
+        const imageUrl = await fileToDataUrl(form.image);
+        const clothing: ClothingItem = {
+          id: crypto.randomUUID(),
+          name: form.name,
+          category: form.category,
+          brand: form.brand || null,
+          image_url: imageUrl,
+          image_path: `trial/${crypto.randomUUID()}`,
+          created_at: new Date().toISOString(),
+        };
+
+        setItems(saveTrialClothing(clothing) as ClothingItem[]);
+        setForm(initialState);
+        setMessage("试用服装已保存。");
+        return;
+      }
+
       const { imageUrl, imagePath } = await uploadClothingImage(
         form.image,
         form.category,
@@ -157,7 +182,8 @@ export default function ClothesForm() {
     setMessage("");
 
     if (!supabase) {
-      setMessage("Supabase 未配置。");
+      setItems(deleteTrialClothing(item.id) as ClothingItem[]);
+      setMessage("已删除。");
       return;
     }
 

@@ -5,6 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
+import {
+  createTrialTryOnJob,
+  readTrialJob,
+  updateTrialJob,
+} from "@/lib/trial-store";
 
 type TryOnJob = {
   id: string;
@@ -56,7 +61,9 @@ export default function TryOnResultClient() {
     }
 
     if (!isSupabaseConfigured || !supabase) {
-      setMessage("请先在 Vercel 配置 Supabase 环境变量。");
+      const trialJob = readTrialJob(jobId);
+      setJob(trialJob);
+      setMessage(trialJob ? "" : "未找到试用试穿任务。");
       setIsLoading(false);
       return;
     }
@@ -122,12 +129,20 @@ export default function TryOnResultClient() {
   }, [searchParams]);
 
   async function toggleFavorite() {
-    if (!job || !supabase) {
+    if (!job) {
       return;
     }
 
     try {
       const nextFavorite = !job.is_favorite;
+
+      if (!supabase) {
+        updateTrialJob(job.id, { is_favorite: nextFavorite });
+        setJob({ ...job, is_favorite: nextFavorite });
+        setMessage(nextFavorite ? "已收藏。" : "已取消收藏。");
+        return;
+      }
+
       const { error } = await supabase
         .from("try_on_jobs")
         .update({ is_favorite: nextFavorite })
@@ -147,7 +162,7 @@ export default function TryOnResultClient() {
   }
 
   async function retryTryOn() {
-    if (!job || !supabase) {
+    if (!job) {
       return;
     }
 
@@ -155,6 +170,18 @@ export default function TryOnResultClient() {
     setMessage("");
 
     try {
+      if (!supabase) {
+        const nextJob = createTrialTryOnJob({
+          clothingId: job.clothing_id ?? "",
+          clothingImageUrl: job.clothing_image_url,
+          userId: job.user_id ?? "",
+          userPhotoUrl: job.user_photo_url,
+        });
+
+        router.push(`/try-on/result?id=${nextJob.id}`);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("try_on_jobs")
         .insert({

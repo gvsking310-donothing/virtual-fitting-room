@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
+import { readTrialClothes, readTrialJobs, readTrialUser } from "@/lib/trial-store";
 
 type RecentTryOnJob = {
   id: string;
@@ -67,7 +68,20 @@ export default function HomeClient() {
   useEffect(() => {
     async function loadDashboard() {
       if (!isSupabaseConfigured || !supabase) {
-        setMessage("请先配置 Supabase 环境变量。");
+        const trialUser = readTrialUser();
+        const trialClothes = readTrialClothes();
+        const trialJobs = readTrialJobs();
+        setStats({
+          clothesCount: trialClothes.length,
+          tryOnCount: trialJobs.length,
+          favoriteCount: trialJobs.filter((job) => job.is_favorite).length,
+        });
+        setProgress({
+          hasProfile: Boolean(trialUser),
+          hasBodyPhoto: Boolean(trialUser?.front_photo_url),
+        });
+        setRecentJobs(trialJobs.slice(0, 3));
+        setMessage("试用模式：当前使用本地数据，无需配置 Supabase。");
         setIsLoading(false);
         return;
       }

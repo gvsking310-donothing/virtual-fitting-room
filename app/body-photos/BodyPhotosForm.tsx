@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
+import { fileToDataUrl, readTrialUser, saveTrialUser } from "@/lib/trial-store";
 
 type PhotoField = "frontPhoto" | "sidePhoto";
 
@@ -75,21 +76,39 @@ export default function BodyPhotosForm() {
       return;
     }
 
-    if (!isSupabaseConfigured || !supabase) {
-      setMessage("请先在 Vercel 配置 Supabase 环境变量。");
-      return;
-    }
-
-    const userId = localStorage.getItem("virtual-fitting-user-id");
-
-    if (!userId) {
-      setMessage("请先完成用户资料录入。");
-      return;
-    }
-
     setIsSaving(true);
 
     try {
+      if (!isSupabaseConfigured || !supabase) {
+        const user = readTrialUser();
+
+        if (!user) {
+          setMessage("请先完成用户资料录入。");
+          return;
+        }
+
+        const frontPhotoUrl = await fileToDataUrl(form.frontPhoto);
+        const sidePhotoUrl = form.sidePhoto
+          ? await fileToDataUrl(form.sidePhoto)
+          : "";
+
+        saveTrialUser({
+          ...user,
+          front_photo_url: frontPhotoUrl,
+          side_photo_url: sidePhotoUrl || null,
+        });
+        setSavedPhotos({ frontPhotoUrl, sidePhotoUrl });
+        setMessage("试用照片已保存。");
+        return;
+      }
+
+      const userId = localStorage.getItem("virtual-fitting-user-id");
+
+      if (!userId) {
+        setMessage("请先完成用户资料录入。");
+        return;
+      }
+
       const frontPhotoUrl = await uploadPhoto(form.frontPhoto, "front");
       const sidePhotoUrl = form.sidePhoto
         ? await uploadPhoto(form.sidePhoto, "side")

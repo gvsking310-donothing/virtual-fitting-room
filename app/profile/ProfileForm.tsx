@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
+import { fileToDataUrl, saveTrialUser } from "@/lib/trial-store";
 
 type Gender = "" | "female" | "male" | "other";
 
@@ -54,15 +55,31 @@ export default function ProfileForm() {
       return;
     }
 
-    if (!isSupabaseConfigured || !supabase) {
-      setMessage("请先在 Vercel 配置 Supabase 环境变量。");
-      return;
-    }
-
     setIsSaving(true);
 
     try {
       let avatarUrl = "";
+
+      if (!isSupabaseConfigured || !supabase) {
+        avatarUrl = form.avatar ? await fileToDataUrl(form.avatar) : "";
+        const user = saveTrialUser({
+          id: crypto.randomUUID(),
+          height_cm: Number(form.height),
+          weight_kg: Number(form.weight),
+          gender: form.gender,
+          age: form.age ? Number(form.age) : null,
+          avatar_url: avatarUrl || null,
+          front_photo_url: null,
+          side_photo_url: null,
+          created_at: new Date().toISOString(),
+        });
+
+        localStorage.setItem("virtual-fitting-user-id", user.id);
+        setMessage("试用资料已保存，正在进入下一步。");
+        setForm(initialState);
+        router.push("/body-photos");
+        return;
+      }
 
       if (form.avatar) {
         const fileExt = form.avatar.name.split(".").pop() ?? "jpg";

@@ -4,6 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
+import {
+  createTrialTryOnJob,
+  readTrialClothes,
+  readTrialOutfits,
+  readTrialUser,
+  saveTrialOutfit,
+} from "@/lib/trial-store";
 
 type UserProfile = {
   id: string;
@@ -172,7 +179,19 @@ export default function TryOnClient() {
       setMessage("");
 
       if (!isSupabaseConfigured || !supabase) {
-        setMessage("请先在 Vercel 配置 Supabase 环境变量。");
+        const trialUser = readTrialUser();
+        const trialClothes = readTrialClothes() as ClothingItem[];
+        const trialOutfits = readTrialOutfits() as SavedOutfit[];
+
+        if (!trialUser) {
+          setMessage("请先完成用户资料录入。");
+          setIsLoading(false);
+          return;
+        }
+
+        setProfile(trialUser);
+        setClothes(trialClothes);
+        setOutfits(trialOutfits);
         setIsLoading(false);
         return;
       }
@@ -278,7 +297,21 @@ export default function TryOnClient() {
     }
 
     if (!supabase) {
-      setMessage("Supabase 未配置。");
+      const outfit: SavedOutfit = {
+        id: crypto.randomUUID(),
+        name: `我的穿搭 ${outfits.length + 1}`,
+        top_id: outfitSelection.top || null,
+        pants_id: outfitSelection.pants || null,
+        shoes_id: outfitSelection.shoes || null,
+        hat_id: outfitSelection.hats || null,
+        bag_id: outfitSelection.bags || null,
+        items: selectedOutfitItems,
+        created_at: new Date().toISOString(),
+      };
+
+      setOutfits(saveTrialOutfit(outfit) as SavedOutfit[]);
+      setMessage("");
+      setToast("穿搭保存成功");
       return;
     }
 
@@ -326,7 +359,14 @@ export default function TryOnClient() {
     }
 
     if (!supabase) {
-      setMessage("Supabase 未配置。");
+      const job = createTrialTryOnJob({
+        clothingId: selectedClothing.id,
+        clothingImageUrl: selectedClothing.image_url,
+        userId: profile.id,
+        userPhotoUrl: profile.front_photo_url,
+      });
+
+      router.push(`/try-on/result?id=${job.id}`);
       return;
     }
 
