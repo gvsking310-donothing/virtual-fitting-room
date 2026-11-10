@@ -125,7 +125,7 @@ async function main() {
         ] = await Promise.all([
           supabase
             .from("users")
-            .select("id, front_photo_url, avatar_url, height, weight, gender")
+            .select("id, front_photo_url, avatar_url, height_cm, weight_kg, gender")
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle(),
